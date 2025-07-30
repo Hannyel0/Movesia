@@ -1,4 +1,3 @@
-import { Input } from '@/app/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -7,9 +6,9 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 
+import { Paperclip } from 'lucide-react';
 import { useState } from 'react';
 import { FaArrowUp } from 'react-icons/fa6';
-import { Paperclip } from 'lucide-react';
 import TextareaAutosize from 'react-textarea-autosize';
 
 export function LandingScreen () {

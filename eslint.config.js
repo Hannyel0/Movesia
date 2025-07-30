@@ -1,6 +1,6 @@
 import neo, { resolveIgnoresFromGitignore, plugins } from 'neostandard';
 
-const stylisticRules = plugins['@stylistic'].configs['all-flat'];
+// const stylisticRules = plugins['@stylistic'].configs['all-flat'];
 const typescriptEslintRules = plugins['typescript-eslint'].configs.recommended;
 
 export default [
@@ -9,7 +9,7 @@ export default [
     semi: true,
     ignores: resolveIgnoresFromGitignore()
   }),
-  stylisticRules,
+  // stylisticRules,
   ...typescriptEslintRules,
   {
     rules: {
@@ -25,28 +25,17 @@ export default [
           ignoreRestSiblings: true
         }
       ],
-      '@stylistic/semi': ['warn', 'always'],
-      '@stylistic/multiline-comment-style': ['warn', 'separate-lines'],
+      '@stylistic/no-trailing-spaces': 'off',
+      '@stylistic/jsx-quotes': 'off',
+      '@stylistic/space-before-function-paren': 'off',
+      '@stylistic/quotes': 'off',
+      '@typescript-eslint/quotes': 'off',
+      '@stylistic/semi': 'off',
+      '@stylistic/multiline-comment-style': 'off',
       '@stylistic/function-call-argument-newline': 'off',
       '@stylistic/lines-around-comment': 'off',
-      '@stylistic/comma-dangle': [
-        'error',
-        {
-          arrays: 'never',
-          objects: 'never',
-          imports: 'never',
-          exports: 'never',
-          functions: 'never'
-        }
-      ],
-      '@stylistic/array-element-newline': [
-        'warn',
-        {
-          minItems: 3,
-          multiline: true,
-          consistent: true
-        }
-      ],
+      '@stylistic/comma-dangle': 'off',
+      '@stylistic/array-element-newline': 'off',
       'import-x/order': [
         'warn',
         {
