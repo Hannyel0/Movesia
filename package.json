@@ -34,9 +34,10 @@
     ]
   },
   "scripts": {
+    "start": "cross-env NODE_ENV=development electron-forge start",
+    "package": "cross-env NODE_ENV=production electron-forge package",
     "dev": "cross-env NODE_ENV=development electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
+    "make": "cross-env NODE_ENV=production electron-forge make",
     "publish": "electron-forge publish",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
