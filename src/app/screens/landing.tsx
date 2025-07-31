@@ -143,7 +143,7 @@ export function LandingScreen () {
                   {message.type === 'user'
                     ? (
                       /* User Message - Light gray bubble aligned right */
-                      <div className='bg-[#2A2A2A] text-white rounded-2xl px-4 py-3 max-w-[40rem] rounded-br-md'>
+                      <div className='bg-[#2A2A2A] text-white rounded-2xl px-4 py-3 max-w-[30rem] rounded-br-md'>
                         <div className='text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap'>
                           {message.content}
                         </div>
@@ -151,7 +151,7 @@ export function LandingScreen () {
                       )
                     : (
                   /* Agent Message - Plain text aligned left */
-                      <div className='text-white text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap max-w-[40rem]'>
+                      <div className='text-white text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap max-w-[36rem]'>
                         {message.content}
                       </div>
                       )}
