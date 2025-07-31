@@ -135,15 +135,15 @@ export function LandingScreen () {
 
       {/* Chat Messages Container - Only show in chat mode */}
       {isChatMode && (
-        <div className='absolute inset-0 flex flex-col'>
-          <div className='flex-1 overflow-y-auto px-6 pt-6 pb-24'>
-            <div className='max-w-[45rem] mx-auto space-y-6'>
+        <div className='absolute inset-0 flex flex-col items-center relative'>
+          <div className='flex-1 overflow-y-auto w-full px-6 pt-6 pb-24 shrink-0'>
+            <div className='w-full max-w-[40rem] mx-auto space-y-6'>
               {messages.map((message) => (
-                <div key={message.id} className={`${message.type === 'user' ? 'flex justify-end' : ''}`}>
+                <div key={message.id} className={`${message.type === 'user' ? 'flex justify-end' : ''} mt-8`}>
                   {message.type === 'user'
                     ? (
                       /* User Message - Light gray bubble aligned right */
-                      <div className='bg-[#2A2A2A] text-white rounded-2xl px-4 py-3 max-w-[80%] rounded-br-md'>
+                      <div className='bg-[#2A2A2A] text-white rounded-2xl px-4 py-3 max-w-[40rem] rounded-br-md'>
                         <div className='text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap'>
                           {message.content}
                         </div>
@@ -151,7 +151,7 @@ export function LandingScreen () {
                       )
                     : (
                   /* Agent Message - Plain text aligned left */
-                      <div className='text-white text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap max-w-[80%]'>
+                      <div className='text-white text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap max-w-[40rem]'>
                         {message.content}
                       </div>
                       )}
@@ -173,7 +173,7 @@ export function LandingScreen () {
         transition={{ type: 'tween', ease: 'easeInOut', duration: 0.5 }}
       >
         <motion.div 
-          className={` shadow-lg transition-all duration-300 pb-3 overflow-hidden ${
+          className={`shadow-lg transition-all duration-300 pb-3 overflow-hidden w-full max-w-[45rem] mx-auto ${
               inputValue.trim() 
                 ? 'bg-[#2A2A2A]' 
                 : 'bg-[#282828] hover:bg-[#2A2A2A]'
