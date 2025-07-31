@@ -1,3 +1,4 @@
+import ConnectionIndicator from '@/app/components/connection-indicator';
 import {
   Select,
   SelectContent,
@@ -92,6 +93,10 @@ export function LandingScreen () {
       className='h-full relative'
       style={{ backgroundColor: '#1B1B1B' }}
     >
+      {/* Unity Connection Status Indicator */}
+      <div className="absolute top-4 left-4 z-10">
+        <ConnectionIndicator />
+      </div>
       {/* Background Elements - Only show in landing mode */}
       {!isChatMode && (
         <>

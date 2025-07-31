@@ -2,7 +2,17 @@ import { MenuChannels } from '@/channels/menuChannels';
 
 import { BrowserWindow, Menu, ipcMain, shell } from 'electron';
 
+// Flag to prevent duplicate registrations
+let isRegistered = false;
+
 export const registerMenuIpc = (mainWindow: BrowserWindow) => {
+  // Prevent duplicate registrations
+  if (isRegistered) {
+    console.log('Menu IPC handlers already registered, skipping registration');
+    return;
+  }
+  
+  isRegistered = true;
   ipcMain.on(MenuChannels.EXECUTE_MENU_ITEM_BY_ID, (event, id) => {
     const currentMenu = Menu.getApplicationMenu();
 

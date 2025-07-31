@@ -36,6 +36,7 @@ export default [
       '@stylistic/lines-around-comment': 'off',
       '@stylistic/comma-dangle': 'off',
       '@stylistic/array-element-newline': 'off',
+      '@stylistic/no-multiple-empty-lines': 'off',
       'import-x/order': [
         'warn',
         {
