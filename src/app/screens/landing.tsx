@@ -78,7 +78,7 @@ export function LandingScreen () {
           timestamp: new Date()
         };
         setMessages(prev => [...prev, botMessage]);
-      }, 1000);
+      }, 2000);
     }
   };
 
@@ -122,8 +122,8 @@ export function LandingScreen () {
 
           {/* Title and Description */}
           <div className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center mb-8 -mt-32'>
-            <h1 className='text-3xl font-semibold text-white mb-2'>Unity Agent</h1>
-            <p className='text-gray-400 text-sm'>Ask me anything about your project...</p>
+            <h1 className='text-3xl font-bold text-white mb-2 tracking-tight'>Unity Agent</h1>
+            <p className='text-gray-400 text-sm font-normal tracking-wide'>Ask me anything about your project...</p>
           </div>
 
           {/* Footer hint */}
@@ -137,42 +137,24 @@ export function LandingScreen () {
       {isChatMode && (
         <div className='absolute inset-0 flex flex-col'>
           <div className='flex-1 overflow-y-auto px-6 pt-6 pb-24'>
-            <div className='max-w-4xl mx-auto space-y-4'>
+            <div className='max-w-[45rem] mx-auto space-y-6'>
               {messages.map((message) => (
-                <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`flex items-start gap-3 max-w-[80%] ${message.type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                    {/* Avatar */}
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      message.type === 'user' 
-                        ? 'bg-blue-600' 
-                        : 'bg-gray-600'
-                    }`}
-                    >
-                      <span className='text-white text-sm font-medium'>
-                        {message.type === 'user' ? 'U' : 'B'}
-                      </span>
-                    </div>
-                    
-                    {/* Message Bubble */}
-                    <div className={`rounded-2xl px-4 py-3 ${
-                      message.type === 'user'
-                        ? 'bg-blue-600 text-white rounded-br-md'
-                        : 'bg-[#2A2A2A] text-white rounded-bl-md border border-gray-700'
-                    }`}
-                    >
-                      <div className='text-sm leading-relaxed whitespace-pre-wrap'>
+                <div key={message.id} className={`${message.type === 'user' ? 'flex justify-end' : ''}`}>
+                  {message.type === 'user'
+                    ? (
+                      /* User Message - Light gray bubble aligned right */
+                      <div className='bg-[#2A2A2A] text-white rounded-2xl px-4 py-3 max-w-[80%] rounded-br-md'>
+                        <div className='text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap'>
+                          {message.content}
+                        </div>
+                      </div>
+                      )
+                    : (
+                  /* Agent Message - Plain text aligned left */
+                      <div className='text-white text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap max-w-[80%]'>
                         {message.content}
                       </div>
-                      <div className={`text-xs mt-1 ${
-                        message.type === 'user' 
-                          ? 'text-blue-100' 
-                          : 'text-gray-400'
-                      }`}
-                      >
-                        {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    </div>
-                  </div>
+                      )}
                 </div>
               ))}
               <div ref={messagesEndRef} />

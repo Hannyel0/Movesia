@@ -1,6 +1,14 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@font-face {
+  font-family: 'Inter';
+  src: url('/assets/fonts/Inter-Variable.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -158,8 +166,10 @@
   html,
   body,
   #root {
-    @apply bg-background text-foreground h-full
-    
+    @apply bg-background text-foreground h-full font-sans antialiased;
+    font-variation-settings: 'wdth' 100, 'opsz' 14;
+    letter-spacing: 0.015em;
+    line-height: 1.5;
   }
 }
 
