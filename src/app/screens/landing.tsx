@@ -226,11 +226,7 @@ export function LandingScreen () {
             <div className='w-full max-w-[40rem] mx-auto space-y-6'>
               {messages.map((message) => (
                 <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
-                  <div className={`rounded-2xl px-4 py-2 max-w-[80%] ${
-                      message.type === 'user' 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-[#3A3A3A] text-white'
-                    }`}>
+                  <div className={`${message.type === 'user' ? 'rounded-2xl px-4 py-2 bg-[#3A3A3A]' : 'px-0 py-0'} max-w-[80%] text-white`}>
                     <div className='text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap'>
                       {message.content}
                     </div>
