@@ -221,8 +221,8 @@ export function LandingScreen () {
 
       {/* Chat Messages Container - Only show in chat mode */}
       {isChatMode && (
-        <div className='absolute inset-0 flex flex-col items-center relative'>
-          <div className='flex-1 overflow-y-auto w-full px-6 pt-6 pb-24 shrink-0'>
+        <div className='absolute inset-0 flex flex-col h-full'>
+          <div className='flex-1 overflow-y-auto px-6 pt-6 pb-32'>
             <div className='w-full max-w-[40rem] mx-auto space-y-6'>
               {messages.map((message) => (
                 <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
