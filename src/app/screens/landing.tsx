@@ -86,6 +86,23 @@ export function LandingScreen () {
       
       setMessages(prev => [...prev, botPlaceholder]);
       
+      // Check if we're in testing mode
+      if (mode === 'testing') {
+        // Simulate a delay and return hardcoded response
+        setTimeout(() => {
+          const testResponse = `This is a test response for your message: "${userMessage.content}". This response is hardcoded and doesn't use the backend. The current mode is set to "testing". You can switch back to "agent" or "ask" mode to use the actual AI backend.`;
+          
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === botPlaceholder.id 
+                ? { ...msg, content: testResponse, isLoading: false } 
+                : msg
+            )
+          );
+        }, 1000); // 1.5 second delay to simulate processing
+        return; // Exit early, don't call backend
+      }
+      
       try {
         // Step 1: Send the message to the backend using axios
         const response = await axios.post(`${BACKEND_URL}/api/chat`, {
@@ -197,7 +214,7 @@ export function LandingScreen () {
 
           {/* Footer hint */}
           <div className='absolute bottom-20 left-1/2 -translate-x-1/2 text-center'>
-            <p className='text-xs text-gray-500'>Press Enter to send • Shift + Enter for new line • {mode === 'agent' ? 'Agent Mode: Full AI assistance' : 'Ask Mode: Quick questions'}</p>
+            <p className='text-xs text-gray-500'>Press Enter to send • Shift + Enter for new line • {mode === 'agent' ? 'Agent Mode: Full AI assistance' : mode === 'ask' ? 'Ask Mode: Quick questions' : 'Testing Mode: Hardcoded responses'}</p>
           </div>
         </>
       )}
@@ -304,6 +321,12 @@ export function LandingScreen () {
                   className='text-white hover:bg-[#454545] focus:bg-[#454545] cursor-pointer text-xs'
                 >
                   Ask
+                </SelectItem>
+                <SelectItem 
+                  value='testing' 
+                  className='text-white hover:bg-[#454545] focus:bg-[#454545] cursor-pointer text-xs'
+                >
+                  Testing
                 </SelectItem>
               </SelectContent>
             </Select>
