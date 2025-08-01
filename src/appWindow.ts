@@ -13,21 +13,25 @@ let appWindow: BrowserWindow;
  * Create Application Window
  * @returns { BrowserWindow } Application Window Instance
  */
-export function createAppWindow (): BrowserWindow {
+export function createAppWindow(): BrowserWindow {
+  const defaultWidth = 1200;
+  const defaultHeight = 850;
   const minWidth = 960;
   const minHeight = 660;
 
   const savedWindowState = windowStateKeeper({
-    defaultWidth: minWidth,
-    defaultHeight: minHeight,
+    defaultWidth,
+    defaultHeight,
     maximize: false
   });
 
+  // Force the initial size to be our specified dimensions
+  // This overrides any saved state from windowStateKeeper
   const windowOptions: Electron.BrowserWindowConstructorOptions = {
     x: savedWindowState.x,
     y: savedWindowState.y,
-    width: savedWindowState.width,
-    height: savedWindowState.height,
+    width: defaultWidth,
+    height: defaultHeight,
     minWidth,
     minHeight,
     show: false,
@@ -83,7 +87,7 @@ export function createAppWindow (): BrowserWindow {
 /**
  * Register Inter Process Communication
  */
-function registerMainIPC () {
+function registerMainIPC() {
   /**
    * Here you can assign IPC related codes for the application window
    * to Communicate asynchronously from the main process to renderer processes.
