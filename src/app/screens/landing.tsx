@@ -222,7 +222,7 @@ export function LandingScreen () {
       {/* Chat Messages Container - Only show in chat mode */}
       {isChatMode && (
         <div className='absolute inset-0 flex flex-col h-full'>
-          <div className='flex-1 overflow-y-auto px-6 pt-6 pb-32'>
+          <div className='flex-1 overflow-y-auto px-6 pt-6 pb-32 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[#282828] [&::-webkit-scrollbar-thumb:hover]:bg-[#3A3A3A] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:rounded-full'>
             <div className='w-full max-w-[40rem] mx-auto space-y-6'>
               {messages.map((message) => (
                 <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
