@@ -37,6 +37,7 @@ export default [
       '@stylistic/comma-dangle': 'off',
       '@stylistic/array-element-newline': 'off',
       '@stylistic/no-multiple-empty-lines': 'off',
+      '@stylistic/jsx-closing-bracket-location': 'off',
       'import-x/order': [
         'warn',
         {

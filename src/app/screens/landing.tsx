@@ -7,6 +7,7 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 
+import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Paperclip } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
@@ -18,7 +19,11 @@ interface Message {
   content: string;
   type: 'user' | 'bot';
   timestamp: Date;
+  isLoading?: boolean;
 }
+
+// Backend API configuration
+const BACKEND_URL = 'http://localhost:8000';
 
 // Animation variants for the input container
 const inputVariants = {
@@ -53,7 +58,7 @@ export function LandingScreen () {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (inputValue.trim()) {
       const userMessage: Message = {
         id: Date.now().toString(),
@@ -65,21 +70,80 @@ export function LandingScreen () {
       setMessages(prev => [...prev, userMessage]);
       setInputValue('');
       
-      // Transition to chat mode on first message
+      // If this is the first message, transition to chat mode
       if (!isChatMode) {
         setIsChatMode(true);
       }
-
-      // Simulate bot response after a short delay
-      setTimeout(() => {
-        const botMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          content: "I'm a demo bot response. In a real implementation, this would be connected to your AI service.",
-          type: 'bot',
-          timestamp: new Date()
+      
+      // Create a placeholder for the bot's response
+      const botPlaceholder: Message = {
+        id: `bot-${Date.now()}`,
+        content: '',
+        type: 'bot',
+        timestamp: new Date(),
+        isLoading: true
+      };
+      
+      setMessages(prev => [...prev, botPlaceholder]);
+      
+      try {
+        // Step 1: Send the message to the backend using axios
+        const response = await axios.post(`${BACKEND_URL}/api/chat`, {
+          message: userMessage.content,
+          model: 'gpt-4o-mini' // Using default model
+        });
+        
+        // Axios automatically throws errors for non-2xx responses
+        // and parses JSON responses into response.data
+        const sessionId = response.data.session_id;
+        
+        // Step 2: Connect to the streaming endpoint
+        const eventSource = new EventSource(`${BACKEND_URL}/api/chat/stream?session=${sessionId}`);
+        
+        let fullResponse = '';
+        
+        eventSource.onmessage = (event) => {
+          fullResponse += event.data;
+          
+          // Update the bot message with the accumulated response
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === botPlaceholder.id 
+                ? { ...msg, content: fullResponse, isLoading: false } 
+                : msg
+            )
+          );
         };
-        setMessages(prev => [...prev, botMessage]);
-      }, 2000);
+        
+        eventSource.addEventListener('completion', () => {
+          eventSource.close();
+        });
+        
+        eventSource.addEventListener('error', (event) => {
+          console.error('SSE Error:', event);
+          eventSource.close();
+          
+          // Update the bot message to show the error
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === botPlaceholder.id 
+                ? { ...msg, content: 'Sorry, there was an error processing your request.', isLoading: false } 
+                : msg
+            )
+          );
+        });
+      } catch (error) {
+        console.error('Error sending message:', error);
+        
+        // Update the bot message to show the error
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === botPlaceholder.id 
+              ? { ...msg, content: 'Sorry, there was an error connecting to the agent.', isLoading: false } 
+              : msg
+          )
+        );
+      }
     }
   };
 
@@ -144,22 +208,23 @@ export function LandingScreen () {
           <div className='flex-1 overflow-y-auto w-full px-6 pt-6 pb-24 shrink-0'>
             <div className='w-full max-w-[40rem] mx-auto space-y-6'>
               {messages.map((message) => (
-                <div key={message.id} className={`${message.type === 'user' ? 'flex justify-end' : ''} mt-8`}>
-                  {message.type === 'user'
-                    ? (
-                      /* User Message - Light gray bubble aligned right */
-                      <div className='bg-[#2A2A2A] text-white rounded-2xl px-4 py-3 max-w-[30rem] rounded-br-md'>
-                        <div className='text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap'>
-                          {message.content}
-                        </div>
+                <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
+                  <div className={`rounded-2xl px-4 py-2 max-w-[80%] ${
+                      message.type === 'user' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-[#3A3A3A] text-white'
+                    }`}>
+                    <div className='text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap'>
+                      {message.content}
+                    </div>
+                    {message.isLoading && (
+                      <div className="mt-2 flex space-x-1 justify-center">
+                        <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                       </div>
-                      )
-                    : (
-                  /* Agent Message - Plain text aligned left */
-                      <div className='text-white text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap max-w-[36rem]'>
-                        {message.content}
-                      </div>
-                      )}
+                    )}
+                  </div>
                 </div>
               ))}
               <div ref={messagesEndRef} />

@@ -1,12 +1,13 @@
 import { MenuChannels } from '@/channels/menuChannels';
-import { emitEvent } from '@/webContents';
+// Removed unused import: import { emitEvent } from '@/webContents';
 
 const MenuItems: Electron.MenuItemConstructorOptions[] = [
   {
-    label: 'Reactronite',
+    label: 'Movesia',
     submenu: [
       {
-        label: 'About Reactronite'
+        id: MenuChannels.OPEN_MOVESIA_WEBSITE,
+        label: 'About Movesia'
       },
       {
         type: 'separator'
@@ -58,16 +59,7 @@ const MenuItems: Electron.MenuItemConstructorOptions[] = [
       }
     ]
   },
-  {
-    label: 'Authors',
-    submenu: [
-      {
-        id: MenuChannels.OPEN_GITHUB_PROFILE,
-        label: 'flaviodelgrosso',
-        click: emitEvent(MenuChannels.OPEN_GITHUB_PROFILE, 'flaviodelgrosso')
-      }
-    ]
-  }
+  // Authors menu removed
 ];
 
 export default MenuItems;

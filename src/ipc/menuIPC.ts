@@ -78,4 +78,8 @@ export const registerMenuIpc = (mainWindow: BrowserWindow) => {
   ipcMain.handle(MenuChannels.OPEN_GITHUB_PROFILE, (_event, id) => {
     shell.openExternal(`https://github.com/${id}`);
   });
+
+  ipcMain.handle(MenuChannels.OPEN_MOVESIA_WEBSITE, () => {
+    shell.openExternal('https://movesia.com');
+  });
 };
