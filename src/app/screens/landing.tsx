@@ -13,6 +13,10 @@ import { Paperclip } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { FaArrowUp } from 'react-icons/fa6';
 import TextareaAutosize from 'react-textarea-autosize';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
 
 interface Message {
   id: string;
@@ -90,9 +94,9 @@ export function LandingScreen () {
       
       // Check if we're in testing mode
       if (mode === 'testing') {
-        // Simulate a delay and return hardcoded response
+        // Simulate a delay and return hardcoded response with Movesia Backend Agent documentation
         setTimeout(() => {
-          const testResponse = `This is a test response for your message: "${userMessage.content}". This response is hardcoded and doesn't use the backend. The current mode is set to "testing". You can switch back to "agent" or "ask" mode to use the actual AI backend.`;
+          const testResponse = `# Movesia Backend Agent\n\n## Overview\nThe Movesia backend agent is the core server-side component of the Movesia project. It is responsible for handling requests, managing data, and orchestrating the actions of an AI-powered agent. This agent interacts with various services, processes user inputs, and provides intelligent responses or actions based on the application's needs.\n\n### What Does the Agent Do?\n- **Task Orchestration**: The agent receives tasks or queries from clients (such as a frontend or other services) and determines the best way to process them.\n- **AI Integration**: It leverages AI models to interpret, process, or generate responses, depending on the use case.\n- **Memory Management**: The backend includes a memory store for tracking context, conversation history, or other persistent data required by the agent.\n- **Service Coordination**: It may interact with external APIs, databases, or internal modules to fulfill complex workflows.\n\n## Installation\n\n1. **Clone the Repository**\n   \`\`\`bash\n   git clone https://github.com/Hannyel0/MovesiaAgent.git\n   cd movesia-backend-agent\n   \`\`\`\n\n2. **Create and Activate a Virtual Environment (optional but recommended)**\n   \`\`\`bash\n   python -m venv venv\n   # On Windows:\n   venv\\Scripts\\activate\n   # On Unix or MacOS:\n   source venv/bin/activate\n   \`\`\`\n\n3. **Install Dependencies**\n   \`\`\`bash\n   pip install -r requirements.txt\n   \`\`\`\n\n4. **Configure Environment Variables**\n   - Copy \`.env.example\` to \`.env\` and fill in any required configuration values.\n   \`\`\`bash\n   cp .env.example .env\n   # Or manually create/edit .env\n   \`\`\`\n\n## Running the Backend\n\nStart the server using Uvicorn:\n\`\`\`bash\npython -m uvicorn main:app --reload\n\`\`\`\n- The \`--reload\` flag enables auto-reloading on code changes (useful for development).\n- By default, the server will be available at \`http://127.0.0.1:8000\`.\n\n## Project Structure\n- \`main.py\` — Entry point and API server definitions.\n- \`memory_store.py\` — Handles persistent or session memory for the agent.\n- \`embeddings.py\` — (If present) Handles embedding generation or vector operations.\n- \`requirements.txt\` — Python dependencies.\n- \`.env.example\` — Example environment configuration.\n\n## Contributing\nFeel free to open issues or submit pull requests for improvements or bug fixes if you have access to the repo.`;
           
           setMessages(prev => 
             prev.map(msg => 
@@ -101,7 +105,7 @@ export function LandingScreen () {
                 : msg
             )
           );
-        }, 1000); // 1.5 second delay to simulate processing
+        }, 1000); // 1 second delay to simulate processing
         return; // Exit early, don't call backend
       }
       
@@ -264,8 +268,89 @@ export function LandingScreen () {
                     )}
                     
                     {/* then the answer content */}
-                    <div className='text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap'>
-                      {message.content}
+                    <div className='text-sm leading-relaxed tracking-wide font-normal text-white'>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeRaw, rehypeSanitize]}
+                        components={{
+                          a: ({ href, children, ...props }) => (
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+                              {...props}
+                            >
+                              {children}
+                            </a>
+                          ),
+                          code({ inline, className, children, ...props }: any) {
+                            return inline ? (
+                              <code className="bg-gray-800 text-gray-200 px-1.5 py-0.5 rounded text-xs font-mono" {...props}>
+                                {children}
+                              </code>
+                            ) : (
+                              <pre className="bg-gray-900 p-4 rounded-lg overflow-auto my-4 border border-gray-700">
+                                <code className={`${className} text-gray-200 text-xs font-mono`} {...props}>
+                                  {children}
+                                </code>
+                              </pre>
+                            );
+                          },
+                          h1: ({ children, ...props }) => (
+                            <h1 className="text-xl font-bold text-white mb-4 mt-6" {...props}>
+                              {children}
+                            </h1>
+                          ),
+                          h2: ({ children, ...props }) => (
+                            <h2 className="text-lg font-semibold text-white mb-3 mt-5" {...props}>
+                              {children}
+                            </h2>
+                          ),
+                          h3: ({ children, ...props }) => (
+                            <h3 className="text-base font-medium text-white mb-2 mt-4" {...props}>
+                              {children}
+                            </h3>
+                          ),
+                          p: ({ children, ...props }) => (
+                            <p className="text-white mb-3 leading-relaxed" {...props}>
+                              {children}
+                            </p>
+                          ),
+                          ul: ({ children, ...props }) => (
+                            <ul className="list-disc list-inside text-white mb-3 space-y-1" {...props}>
+                              {children}
+                            </ul>
+                          ),
+                          ol: ({ children, ...props }) => (
+                            <ol className="list-decimal list-inside text-white mb-3 space-y-1" {...props}>
+                              {children}
+                            </ol>
+                          ),
+                          li: ({ children, ...props }) => (
+                            <li className="text-white" {...props}>
+                              {children}
+                            </li>
+                          ),
+                          blockquote: ({ children, ...props }) => (
+                            <blockquote className="border-l-4 border-gray-600 pl-4 py-2 my-4 bg-gray-800/50 rounded-r" {...props}>
+                              {children}
+                            </blockquote>
+                          ),
+                          strong: ({ children, ...props }) => (
+                            <strong className="font-semibold text-white" {...props}>
+                              {children}
+                            </strong>
+                          ),
+                          em: ({ children, ...props }) => (
+                            <em className="italic text-gray-200" {...props}>
+                              {children}
+                            </em>
+                          ),
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
                     </div>
                     
                     {/* loading dots */}
