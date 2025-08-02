@@ -48,6 +48,8 @@ export function LandingScreen () {
   const [mode, setMode] = useState('agent');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isChatMode, setIsChatMode] = useState(false);
+  // key = botPlaceholder.id, value = array of reasoning steps
+  const [reasoningMap, setReasoningMap] = useState<Record<string, { node: string; content: string; }[]>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -115,35 +117,58 @@ export function LandingScreen () {
         const sessionId = response.data.session_id;
         
         // Step 2: Connect to the streaming endpoint
-        const eventSource = new EventSource(`${BACKEND_URL}/api/chat/stream?session=${sessionId}`);
+        const placeholderId = botPlaceholder.id;
+        setReasoningMap(prev => ({ ...prev, [placeholderId]: [] }));
         
-        let fullResponse = '';
+        const es = new EventSource(`${BACKEND_URL}/api/chat/stream?session=${sessionId}`);
         
-        eventSource.onmessage = (event) => {
-          fullResponse += event.data;
-          
-          // Update the bot message with the accumulated response
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.id === botPlaceholder.id 
-                ? { ...msg, content: fullResponse, isLoading: false } 
-                : msg
-            )
-          );
-        };
+        let answerSoFar = "";
         
-        eventSource.addEventListener('completion', () => {
-          eventSource.close();
+        // 1️⃣ intermediate "reasoning" events
+        es.addEventListener("reasoning", (e) => {
+          const update: Record<string, string> = JSON.parse(e.data);
+          // flatten {LLM: "...", light_rag_retriever: "..."} into steps
+          const steps = Object.entries(update).map(([node, content]) => ({ node, content }));
+          setReasoningMap(prev => ({
+            ...prev,
+            [placeholderId]: [...(prev[placeholderId] || []), ...steps]
+          }));
         });
         
-        eventSource.addEventListener('error', (event) => {
+        // 2️⃣ answer‐token events
+        es.addEventListener("answer", (e) => {
+          const { text } = JSON.parse(e.data);
+          answerSoFar += text;
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === placeholderId
+                ? { ...m, content: answerSoFar }
+                : m
+            )
+          );
+        });
+        
+        // 3️⃣ completion event
+        es.addEventListener("completion", () => {
+          es.close();
+          // flip off loading after full answer
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === placeholderId
+                ? { ...m, isLoading: false }
+                : m
+            )
+          );
+        });
+        
+        es.addEventListener('error', (event) => {
           console.error('SSE Error:', event);
-          eventSource.close();
+          es.close();
           
           // Update the bot message to show the error
           setMessages(prev => 
             prev.map(msg => 
-              msg.id === botPlaceholder.id 
+              msg.id === placeholderId 
                 ? { ...msg, content: 'Sorry, there was an error processing your request.', isLoading: false } 
                 : msg
             )
@@ -227,9 +252,23 @@ export function LandingScreen () {
               {messages.map((message) => (
                 <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
                   <div className={`${message.type === 'user' ? 'rounded-2xl px-4 py-2 bg-[#3A3A3A]' : 'px-0 py-0'} max-w-[80%] text-white`}>
+                    {/* only for bot messages: show reasoning */}
+                    {message.type === 'bot' && reasoningMap[message.id]?.length > 0 && (
+                      <div className="mb-2 space-y-1 text-xs text-gray-400">
+                        {reasoningMap[message.id].map((step, i) => (
+                          <div key={i}>
+                            <strong>{step.node}:</strong> {step.content}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* then the answer content */}
                     <div className='text-sm leading-relaxed tracking-wide font-normal whitespace-pre-wrap'>
                       {message.content}
                     </div>
+                    
+                    {/* loading dots */}
                     {message.isLoading && (
                       <div className="mt-2 flex space-x-1 justify-center">
                         <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
