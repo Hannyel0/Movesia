@@ -1,6 +1,23 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Ensure no default margins/padding that could cause overflow */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+  max-height: 100vh;
+}
+
 @font-face {
   font-family: 'Inter';
   src: url('/assets/fonts/Inter-Variable.ttf') format('truetype-variations');
@@ -250,5 +267,14 @@
 
   .control.close:hover {
     @apply bg-destructive;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
   }
 }

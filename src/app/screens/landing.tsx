@@ -1,4 +1,5 @@
 import ConnectionIndicator from "@/app/components/connection-indicator";
+import Sidebar from "@/app/components/sidebar";
 import {
   Select,
   SelectContent,
@@ -175,6 +176,14 @@ interface MovesiaState extends Record<string, unknown> {
   context?: Record<string, unknown>;
 }
 
+// Chat session interface for sidebar
+interface ChatSession {
+  id: string;
+  title: string;
+  timestamp: Date;
+  messageCount: number;
+}
+
 export function LandingScreen() {
   const [inputValue, setInputValue] = useState("");
   const [mode, setMode] = useState("agent");
@@ -183,6 +192,30 @@ export function LandingScreen() {
   // Removed toolEvents state - no longer tracking tool calls
   const [_threadId, setThreadId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Sidebar state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([
+    {
+      id: "1",
+      title: "Getting started with Movesia",
+      timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
+      messageCount: 5,
+    },
+    {
+      id: "2",
+      title: "How to use RAG retrieval",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
+      messageCount: 12,
+    },
+    {
+      id: "3",
+      title: "LangGraph integration help",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
+      messageCount: 8,
+    },
+  ]);
+  const [currentSessionId, setCurrentSessionId] = useState<string>("1");
 
   // Initialize LangGraph useStream hook with UI message support
   const thread = useStream<
@@ -235,18 +268,61 @@ export function LandingScreen() {
       // Handle metadata events (Run ID, Thread ID)
       console.log("Metadata event:", event);
     },
-    onCustomEvent: (event, options) => {
+    onCustomEvent: (event: { type: string; [key: string]: unknown }, options) => {
       // Handle UI messages for Generative UI components
-      if ((event as any)?.type === "ui" || (event as any)?.type === "remove-ui") {
+      if (event?.type === "ui" || event?.type === "remove-ui") {
         options.mutate((prev) => ({
           ...prev,
-          ui: uiMessageReducer(prev.ui ?? [], event as any),
+          ui: uiMessageReducer(prev.ui ?? [], event as UIMessage | { type: "remove-ui"; id: string }),
         }));
       }
     },
   });
 
   const { values: _values } = thread;
+
+  // Sidebar handlers
+  const handleNewSession = () => {
+    const newSession: ChatSession = {
+      id: Date.now().toString(),
+      title: "New conversation",
+      timestamp: new Date(),
+      messageCount: 0,
+    };
+    setChatSessions(prev => [newSession, ...prev]);
+    setCurrentSessionId(newSession.id);
+    // Reset chat state for new session
+    setIsChatMode(false);
+    setInputValue("");
+  };
+
+  const handleSessionSelect = (sessionId: string) => {
+    setCurrentSessionId(sessionId);
+    // Here you would typically load the session's messages
+    // For now, we'll just switch the active session
+  };
+
+  const handleDeleteSession = (sessionId: string) => {
+    setChatSessions(prev => prev.filter(session => session.id !== sessionId));
+    if (currentSessionId === sessionId) {
+      const remainingSessions = chatSessions.filter(s => s.id !== sessionId);
+      if (remainingSessions.length > 0) {
+        setCurrentSessionId(remainingSessions[0].id);
+      } else {
+        handleNewSession();
+      }
+    }
+  };
+
+  const handleRenameSession = (sessionId: string, newTitle: string) => {
+    setChatSessions(prev => 
+      prev.map(session => 
+        session.id === sessionId 
+          ? { ...session, title: newTitle }
+          : session
+      )
+    );
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -330,8 +406,22 @@ export function LandingScreen() {
     // Add your attachment logic here
   };
 
-  return (
-    <div className="h-full relative" style={{ backgroundColor: "#1B1B1B" }}>
+return (
+  <div className="w-full h-full bg-[#1A1A1A] text-white overflow-hidden relative flex">
+    {/* Sidebar */}
+    <Sidebar
+      isCollapsed={sidebarCollapsed}
+      onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+      sessions={chatSessions}
+      currentSessionId={currentSessionId}
+      onSessionSelect={handleSessionSelect}
+      onNewSession={handleNewSession}
+      onDeleteSession={handleDeleteSession}
+      onRenameSession={handleRenameSession}
+    />
+    
+    {/* Main Content */}
+    <div className="flex-1 relative" style={{ backgroundColor: "#1B1B1B" }}>
       {/* Unity Connection Status Indicator */}
       <div className="absolute top-4 left-4 z-10">
         <ConnectionIndicator />
@@ -480,8 +570,8 @@ export function LandingScreen() {
                   <div key={message.id}>
                     {/* Render UI messages (search chip) before AI responses */}
                     {relevantUIMessages.length > 0 && (
-                      <div className="flex justify-center mb-4">
-                        <div className="flex flex-col items-center gap-2">
+                      <div className="flex justify-start mb-4 ml-4">
+                        <div className="flex flex-col items-start gap-2">
                           {relevantUIMessages.map((ui) => (
                             <LoadExternalComponent key={ui.id} stream={thread} message={ui} />
                           ))}
@@ -744,15 +834,15 @@ export function LandingScreen() {
         </div>
       )}
 
-      {/* Animated Input Container */}
-      <motion.div
-        className="absolute left-1/2 z-20 px-6"
-        style={{ translateX: "-50%" }}
-        variants={inputVariants}
-        initial="landing"
-        animate={isChatMode ? "chat" : "landing"}
-        transition={{ type: "tween", ease: "easeInOut", duration: 0.5 }}
-      >
+        {/* Animated Input Container */}
+        <motion.div
+          className="absolute left-1/2 z-20 px-6"
+          style={{ translateX: "-50%" }}
+          variants={inputVariants}
+          initial="landing"
+          animate={isChatMode ? "chat" : "landing"}
+          transition={{ type: "tween", ease: "easeInOut", duration: 0.5 }}
+        >
         <motion.div
           className={`shadow-lg transition-all duration-300 pb-3 overflow-hidden w-full max-w-[45rem] mx-auto ${
             inputValue.trim()
@@ -865,8 +955,9 @@ export function LandingScreen() {
               )}
             </div>
           </div>
+          </motion.div>
         </motion.div>
-      </motion.div>
+      </div>
     </div>
   );
 }

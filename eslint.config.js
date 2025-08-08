@@ -27,25 +27,6 @@ export default [
           ignoreRestSiblings: true
         }
       ],
-      // No more @stylistic/... rules needed here
-      'import-x/order': [
-        'warn',
-        {
-          'newlines-between': 'always',
-          groups: [
-            'builtin',
-            'internal',
-            'external',
-            'sibling',
-            'parent',
-            'index'
-          ],
-          alphabetize: {
-            order: 'asc',
-            caseInsensitive: true
-          }
-        }
-      ]
     }
   }
 ];
