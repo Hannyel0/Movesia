@@ -52,6 +52,8 @@
     "push-release": "git push --follow-tags origin master"
   },
   "dependencies": {
+    "@langchain/core": "^0.3.66",
+    "@langchain/langgraph-sdk": "^0.0.105",
     "@radix-ui/react-dropdown-menu": "^2.1.15",
     "@radix-ui/react-select": "^2.2.5",
     "@radix-ui/react-slot": "^1.2.3",

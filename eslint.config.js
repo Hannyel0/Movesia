@@ -1,16 +1,18 @@
-import neo, { resolveIgnoresFromGitignore, plugins } from 'neostandard';
+import neostandard, {
+  resolveIgnoresFromGitignore,
+  plugins
+} from 'neostandard';
 
-// const stylisticRules = plugins['@stylistic'].configs['all-flat'];
-const typescriptEslintRules = plugins['typescript-eslint'].configs.recommended;
+const tsEslintRules = plugins['typescript-eslint'].configs.recommended;
 
 export default [
-  ...neo({
+  ...neostandard({
     ts: true,
     semi: true,
+    noStyle: true,                           // disable all stylistic rules
     ignores: resolveIgnoresFromGitignore()
   }),
-  // stylisticRules,
-  ...typescriptEslintRules,
+  ...tsEslintRules,
   {
     rules: {
       '@typescript-eslint/no-unused-vars': [
@@ -25,19 +27,7 @@ export default [
           ignoreRestSiblings: true
         }
       ],
-      '@stylistic/no-trailing-spaces': 'off',
-      '@stylistic/jsx-quotes': 'off',
-      '@stylistic/space-before-function-paren': 'off',
-      '@stylistic/quotes': 'off',
-      '@typescript-eslint/quotes': 'off',
-      '@stylistic/semi': 'off',
-      '@stylistic/multiline-comment-style': 'off',
-      '@stylistic/function-call-argument-newline': 'off',
-      '@stylistic/lines-around-comment': 'off',
-      '@stylistic/comma-dangle': 'off',
-      '@stylistic/array-element-newline': 'off',
-      '@stylistic/no-multiple-empty-lines': 'off',
-      '@stylistic/jsx-closing-bracket-location': 'off',
+      // No more @stylistic/... rules needed here
       'import-x/order': [
         'warn',
         {
