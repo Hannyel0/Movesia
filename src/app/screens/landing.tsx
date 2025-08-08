@@ -9,6 +9,7 @@ import {
 
 import type { Message } from "@langchain/langgraph-sdk";
 import { useStream } from "@langchain/langgraph-sdk/react";
+import { uiMessageReducer, LoadExternalComponent, type UIMessage } from "@langchain/langgraph-sdk/react-ui";
 import { motion, AnimatePresence } from "framer-motion";
 import { Paperclip, Lightbulb } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
@@ -167,11 +168,12 @@ interface InterruptType {
   value?: string | { content?: string; [key: string]: unknown };
 }
 
-// Simplified state type - removed UI message handling
-type MovesiaState = {
+// State type with UI message handling for Generative UI
+interface MovesiaState extends Record<string, unknown> {
   messages: Message[];
+  ui?: UIMessage[];
   context?: Record<string, unknown>;
-};
+}
 
 export function LandingScreen() {
   const [inputValue, setInputValue] = useState("");
@@ -182,16 +184,18 @@ export function LandingScreen() {
   const [_threadId, setThreadId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize LangGraph useStream hook - simplified without tool rendering
+  // Initialize LangGraph useStream hook with UI message support
   const thread = useStream<
     MovesiaState,
     {
       InterruptType: InterruptType;
       UpdateType: {
         messages: Message | Message[];
+        ui?: UIMessage[];
         context?: Record<string, unknown>;
       };
       ConfigurableType: { model?: string; temperature?: number };
+      CustomEventType: { type: string; [key: string]: unknown };
     }
   >({
     apiUrl: API_URL, // Use mounted LangGraph endpoints
@@ -231,8 +235,15 @@ export function LandingScreen() {
       // Handle metadata events (Run ID, Thread ID)
       console.log("Metadata event:", event);
     },
-    // Removed onLangChainEvent handler - no longer tracking tool events
-    // Removed onCustomEvent handler - no longer processing UI messages
+    onCustomEvent: (event, options) => {
+      // Handle UI messages for Generative UI components
+      if ((event as any)?.type === "ui" || (event as any)?.type === "remove-ui") {
+        options.mutate((prev) => ({
+          ...prev,
+          ui: uiMessageReducer(prev.ui ?? [], event as any),
+        }));
+      }
+    },
   });
 
   const { values: _values } = thread;
@@ -325,6 +336,8 @@ export function LandingScreen() {
       <div className="absolute top-4 left-4 z-10">
         <ConnectionIndicator />
       </div>
+
+
       {/* Background Elements - Only show in landing mode */}
       {!isChatMode && (
         <>
@@ -453,13 +466,35 @@ export function LandingScreen() {
                 </div>
               )}
 
-              {thread.messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${
-                    message.type === "human" ? "justify-end" : "justify-start"
-                  } mb-6 group`}
-                >
+              {thread.messages.map((message, index) => {
+                // Check if this is an AI message and if there are UI messages to show before it
+                const isAIMessage = message.type === "ai";
+                const previousMessage = index > 0 ? thread.messages[index - 1] : null;
+                const shouldShowUIMessages = isAIMessage && previousMessage?.type === "human";
+                
+                const relevantUIMessages = shouldShowUIMessages 
+                  ? thread.values?.ui?.filter((ui) => !ui?.metadata?.message_id && ui?.name === "search_chip") || []
+                  : [];
+
+                return (
+                  <div key={message.id}>
+                    {/* Render UI messages (search chip) before AI responses */}
+                    {relevantUIMessages.length > 0 && (
+                      <div className="flex justify-center mb-4">
+                        <div className="flex flex-col items-center gap-2">
+                          {relevantUIMessages.map((ui) => (
+                            <LoadExternalComponent key={ui.id} stream={thread} message={ui} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Render the actual message */}
+                    <div
+                      className={`flex ${
+                        message.type === "human" ? "justify-end" : "justify-start"
+                      } mb-6 group`}
+                    >
                   <div
                     className={`${
                       message.type === "human"
@@ -699,8 +734,10 @@ export function LandingScreen() {
                       );
                     })()}
                   </div>
-                </div>
-              ))}
+                    </div>
+                  </div>
+                );
+              })}
               <div ref={messagesEndRef} />
             </div>
           </div>
