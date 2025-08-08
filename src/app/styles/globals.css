@@ -229,7 +229,8 @@ html, body {
 
   /* Window Titlebar Styles */
   .window-titlebar {
-    @apply flex items-stretch h-8 bg-background select-none sticky top-0 z-50;
+    @apply flex items-stretch h-8 select-none sticky top-0 z-50;
+    background-color: #1A1A1A;
     -webkit-app-region: drag;
   }
 

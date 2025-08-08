@@ -8,6 +8,7 @@ import type { WebSocket } from 'ws';
 import { createAppWindow } from './appWindow';
 import { WSChannels } from './channels/wsChannels';
 import type { WebSocketMessage, CommandMessage, UnityCommand } from './types/websocket';
+import { registerUnityProjectHandlers } from './main/unity-project-ipc';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 /**
@@ -15,12 +16,12 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
  */
 function handleCommand(ws: WebSocket, data: CommandMessage) {
   console.log(chalk.yellow(`Received command: ${JSON.stringify(data.payload)}`));
-  
+
   try {
     // Check if payload exists and is a valid object
     if (data.payload && typeof data.payload === 'object' && 'action' in data.payload) {
       const unityCommand = data.payload as UnityCommand;
-      
+
       switch (unityCommand.action) {
         case 'move':
           console.log(chalk.magenta(`Moving object ${unityCommand.target} to:`), unityCommand.parameters);
@@ -44,7 +45,7 @@ function handleCommand(ws: WebSocket, data: CommandMessage) {
           console.log(chalk.magenta(`Unknown Unity action: ${unityCommand.action}`));
       }
     }
-    
+
     // Send success response
     ws.send(JSON.stringify({
       type: 'commandResponse',
@@ -84,32 +85,45 @@ function updateConnectionStatus() {
 app.whenReady().then(() => {
   // Get the window instance from createAppWindow
   mainWindow = createAppWindow();
-  
+
+  // Register Unity project IPC handlers
+  registerUnityProjectHandlers();
+
   // Send initial connection status to renderer
   updateConnectionStatus();
-  
-  installExtension(REACT_DEVELOPER_TOOLS)
-    .then((extension) => console.info(`Added Extension:  ${extension.name}`))
-    .catch((err) => console.info('An error occurred: ', err));
+
+  // Install React Developer Tools using modern Electron API
+  if (process.env.NODE_ENV === 'development') {
+    installExtension(REACT_DEVELOPER_TOOLS, {
+      loadExtensionOptions: { allowFileAccess: true },
+      forceDownload: false
+    })
+      .then((_extensionPath) => {
+        console.info(`Added Extension: React Developer Tools`);
+      })
+      .catch((err) => {
+        console.info('DevTools installation failed:', err);
+      });
+  }
 
   // Start WebSocket server for IPC communication
   const wss = new WebSocketServer({ port: 8765 });
   console.log(chalk.cyan('WebSocket server is listening on ws://localhost:8765'));
-  
+
 
 
   wss.on('connection', (ws) => {
     console.log(chalk.green('WebSocket client connected'));
     isConnectedToUnity = true;
     updateConnectionStatus();
-    
+
     // Send a greeting/handshake message
-    ws.send(JSON.stringify({ 
-      type: 'hello', 
+    ws.send(JSON.stringify({
+      type: 'hello',
       payload: 'Connected to Electron WebSocket server',
       timestamp: new Date().toISOString()
     }));
-    
+
 
 
     // Handle incoming messages
@@ -117,55 +131,55 @@ app.whenReady().then(() => {
       try {
         const data: WebSocketMessage = JSON.parse(message.toString());
         console.log(`Unity→Electron: ${JSON.stringify(data)}`);
-        
+
         // Handle different message types
         switch (data.type) {
           case 'ping':
-            ws.send(JSON.stringify({ 
-              type: 'pong', 
-              timestamp: new Date().toISOString() 
+            ws.send(JSON.stringify({
+              type: 'pong',
+              timestamp: new Date().toISOString()
             }));
             break;
-            
+
           case 'command':
             handleCommand(ws, data as CommandMessage);
             break;
-            
+
           default:
             console.log(`Unknown message type: ${data.type}`);
-            ws.send(JSON.stringify({ 
-              type: 'error', 
-              payload: `Unknown message type: ${data.type}` 
+            ws.send(JSON.stringify({
+              type: 'error',
+              payload: `Unknown message type: ${data.type}`
             }));
         }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
-        ws.send(JSON.stringify({ 
-          type: 'error', 
-          payload: 'Invalid message format' 
+        ws.send(JSON.stringify({
+          type: 'error',
+          payload: 'Invalid message format'
         }));
       }
     });
 
 
-    
+
     // Handle client disconnect
     ws.on('close', () => {
       console.log(chalk.yellow('WebSocket client disconnected'));
       isConnectedToUnity = false;
       updateConnectionStatus();
     });
-    
+
     // Handle errors
     ws.on('error', (error) => {
       console.error('WebSocket error:', error);
     });
   });
-  
+
   wss.on('listening', () => {
     console.log('WebSocket server listening on ws://localhost:8765');
   });
-  
+
   wss.on('error', (error) => {
     console.error('WebSocket server error:', error);
   });

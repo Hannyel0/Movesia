@@ -11,7 +11,7 @@ export const useRendererListener = (channel: string, listener: RendererListener)
   }, [listener]);
 
   // Stable wrapper function that doesn't change on every render
-  const stableListener = useCallback((event: any, ...args: any[]) => {
+  const stableListener = useCallback((event: Electron.IpcRendererEvent, ...args: unknown[]) => {
     listenerRef.current(event, ...args);
   }, []);
 

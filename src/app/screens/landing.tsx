@@ -1,5 +1,6 @@
-import ConnectionIndicator from "@/app/components/connection-indicator";
-import Sidebar from "@/app/components/sidebar";
+import Sidebar from '../components/sidebar';
+import ConnectionIndicator from '../components/connection-indicator';
+import { ProjectSelector } from '../components/project-selector';
 import {
   Select,
   SelectContent,
@@ -550,6 +551,11 @@ return (
         <ConnectionIndicator />
       </div>
 
+      {/* Project Selector */}
+      <div className="absolute top-4 right-4 z-10">
+        <ProjectSelector />
+      </div>
+
 
       {/* Background Elements - Only show in landing mode */}
       {!isChatMode && (
@@ -995,7 +1001,7 @@ return (
                 isChatMode ? "Message Unity Agent..." : "Ask anything..."
               }
               maxRows={5}
-              className="w-full resize-none rounded-t-2xl px-4 py-4 pr-16 bg-transparent border-0 text-white placeholder:text-gray-400 focus:ring-0 focus:outline-none focus-visible:outline-none focus-visible:ring-0 text-base min-h-[56px]"
+              className="w-full resize-none rounded-t-2xl px-4 py-4 pr-16 bg-transparent border-0 text-white placeholder:text-gray-400 focus:ring-0 focus:outline-none focus-visible:outline-none focus-visible:ring-0 text-base min-h-[56px] sidebar-scroll"
               style={{
                 backgroundColor: "transparent",
                 borderColor: "transparent",
