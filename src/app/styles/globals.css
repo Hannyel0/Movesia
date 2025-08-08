@@ -20,9 +20,20 @@ html, body {
 
 @font-face {
   font-family: 'Inter';
-  src: url('/assets/fonts/Inter-Variable.ttf') format('truetype-variations');
+  src: url('/assets/fonts/Inter-VariableFont_opsz,wght.ttf') format('truetype-variations'),
+       url('/assets/fonts/Inter-VariableFont_opsz,wght.ttf') format('truetype');
   font-weight: 100 900;
   font-style: normal;
+  font-display: swap;
+}
+
+/* Fallback for Inter Italic if needed */
+@font-face {
+  font-family: 'Inter';
+  src: url('/assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf') format('truetype-variations'),
+       url('/assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: italic;
   font-display: swap;
 }
 
@@ -191,6 +202,31 @@ html, body {
 }
 
 @layer components {
+  /* Custom Scrollbar Styles */
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    transition: background 0.2s ease;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* For Firefox */
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  }
+
   /* Window Titlebar Styles */
   .window-titlebar {
     @apply flex items-stretch h-8 bg-background select-none sticky top-0 z-50;

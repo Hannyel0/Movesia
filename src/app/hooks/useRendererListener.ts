@@ -1,12 +1,24 @@
 import type { RendererListener } from '@/preload';
 
-import { useEffect } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 
 export const useRendererListener = (channel: string, listener: RendererListener) => {
+  const listenerRef = useRef(listener);
+  
+  // Update the ref when listener changes
   useEffect(() => {
-    electron.ipcRenderer.on(channel, listener);
+    listenerRef.current = listener;
+  }, [listener]);
+
+  // Stable wrapper function that doesn't change on every render
+  const stableListener = useCallback((event: any, ...args: any[]) => {
+    listenerRef.current(event, ...args);
+  }, []);
+
+  useEffect(() => {
+    electron.ipcRenderer.on(channel, stableListener);
     return () => {
-      electron.ipcRenderer.removeListener(channel, listener);
+      electron.ipcRenderer.removeListener(channel, stableListener);
     };
-  }, [channel, listener]);
+  }, [channel, stableListener]);
 };

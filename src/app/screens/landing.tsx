@@ -192,9 +192,10 @@ export function LandingScreen() {
   // Removed toolEvents state - no longer tracking tool calls
   const [_threadId, setThreadId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
   
   // Sidebar state
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([
     {
       id: "1",
@@ -213,6 +214,108 @@ export function LandingScreen() {
       title: "LangGraph integration help",
       timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
       messageCount: 8,
+    },
+    {
+      id: "4",
+      title: "Building React components with TypeScript",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 3), // 3 hours ago
+      messageCount: 15,
+    },
+    {
+      id: "5",
+      title: "Debugging API integration issues",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 6), // 6 hours ago
+      messageCount: 23,
+    },
+    {
+      id: "6",
+      title: "Setting up Electron development environment",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 12), // 12 hours ago
+      messageCount: 7,
+    },
+    {
+      id: "7",
+      title: "CSS Grid vs Flexbox best practices",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 18), // 18 hours ago
+      messageCount: 19,
+    },
+    {
+      id: "8",
+      title: "Implementing dark mode with Tailwind",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2), // 2 days ago
+      messageCount: 11,
+    },
+    {
+      id: "9",
+      title: "Database optimization strategies",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 days ago
+      messageCount: 31,
+    },
+    {
+      id: "10",
+      title: "Authentication with JWT tokens",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4), // 4 days ago
+      messageCount: 14,
+    },
+    {
+      id: "11",
+      title: "State management with Redux Toolkit",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5), // 5 days ago
+      messageCount: 27,
+    },
+    {
+      id: "12",
+      title: "Testing React components with Jest",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 6), // 6 days ago
+      messageCount: 18,
+    },
+    {
+      id: "13",
+      title: "Optimizing bundle size with Webpack",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7), // 1 week ago
+      messageCount: 9,
+    },
+    {
+      id: "14",
+      title: "Docker containerization best practices",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 8), // 8 days ago
+      messageCount: 22,
+    },
+    {
+      id: "15",
+      title: "GraphQL vs REST API comparison",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10), // 10 days ago
+      messageCount: 16,
+    },
+    {
+      id: "16",
+      title: "Microservices architecture patterns",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 12), // 12 days ago
+      messageCount: 35,
+    },
+    {
+      id: "17",
+      title: "Performance monitoring with New Relic",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 14), // 2 weeks ago
+      messageCount: 13,
+    },
+    {
+      id: "18",
+      title: "CI/CD pipeline setup with GitHub Actions",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 16), // 16 days ago
+      messageCount: 25,
+    },
+    {
+      id: "19",
+      title: "Security best practices for web apps",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 18), // 18 days ago
+      messageCount: 29,
+    },
+    {
+      id: "20",
+      title: "Machine learning model deployment",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 20), // 20 days ago
+      messageCount: 42,
     },
   ]);
   const [currentSessionId, setCurrentSessionId] = useState<string>("1");
@@ -339,6 +442,24 @@ export function LandingScreen() {
     }
   }, [thread.isLoading]);
 
+  // Handle outside clicks to close sidebar
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        sidebarRef.current &&
+        !sidebarRef.current.contains(event.target as Node) &&
+        !sidebarCollapsed
+      ) {
+        setSidebarCollapsed(true);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [sidebarCollapsed]);
+
   const handleResumeInterrupt = () => {
     thread.submit(undefined, { command: { resume: true } });
   };
@@ -409,16 +530,18 @@ export function LandingScreen() {
 return (
   <div className="w-full h-full bg-[#1A1A1A] text-white overflow-hidden relative flex">
     {/* Sidebar */}
-    <Sidebar
-      isCollapsed={sidebarCollapsed}
-      onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-      sessions={chatSessions}
-      currentSessionId={currentSessionId}
-      onSessionSelect={handleSessionSelect}
-      onNewSession={handleNewSession}
-      onDeleteSession={handleDeleteSession}
-      onRenameSession={handleRenameSession}
-    />
+    <div ref={sidebarRef}>
+      <Sidebar
+        isCollapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        sessions={chatSessions}
+        currentSessionId={currentSessionId}
+        onSessionSelect={handleSessionSelect}
+        onNewSession={handleNewSession}
+        onDeleteSession={handleDeleteSession}
+        onRenameSession={handleRenameSession}
+      />
+    </div>
     
     {/* Main Content */}
     <div className="flex-1 relative" style={{ backgroundColor: "#1B1B1B" }}>

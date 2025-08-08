@@ -11,13 +11,18 @@ import {
   Trash2,
   Edit3,
   MoreHorizontal,
+  User,
+  LogOut,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/app/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/app/components/ui/dropdown-menu";
 
@@ -89,10 +94,10 @@ export default function Sidebar({
     <motion.div
       initial={false}
       animate={{
-        width: isCollapsed ? 60 : 280,
+        width: isCollapsed ? 48 : 280,
       }}
       transition={{ duration: 0.3, ease: "easeInOut" }}
-      className="relative bg-background border-r border-border flex flex-col overflow-hidden"
+      className="relative bg-[#2A2A2A] flex flex-col overflow-hidden shadow-2xl"
       style={{ 
         height: '100%',
         maxHeight: '100%',
@@ -100,7 +105,7 @@ export default function Sidebar({
       }}
     >
       {/* Header */}
-      <div className="p-3 border-b border-border">
+      <div className="px-3 py-4">
         <div className="flex items-center justify-between">
           <AnimatePresence mode="wait">
             {!isCollapsed && (
@@ -111,8 +116,8 @@ export default function Sidebar({
                 transition={{ duration: 0.2 }}
                 className="flex items-center gap-2"
               >
-                <MessageSquare className="h-6 w-6 text-primary" />
-                <h1 className="font-semibold text-lg">Movesia</h1>
+                <MessageSquare className="h-4 w-4 text-primary" />
+                <h1 className="font-medium text-sm">Movesia</h1>
               </motion.div>
             )}
           </AnimatePresence>
@@ -121,7 +126,7 @@ export default function Sidebar({
             variant="ghost"
             size="sm"
             onClick={onToggle}
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 cursor-pointer"
           >
             {isCollapsed ? (
               <ChevronRight className="h-4 w-4" />
@@ -131,30 +136,10 @@ export default function Sidebar({
           </Button>
         </div>
 
-        {/* New Chat Button */}
-        <AnimatePresence>
-          {!isCollapsed && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2, delay: 0.1 }}
-              className="mt-4"
-            >
-              <Button
-                onClick={onNewSession}
-                className="w-full justify-start gap-2"
-                variant="default"
-              >
-                <Plus className="h-4 w-4" />
-                New Chat
-              </Button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+
       </div>
 
-      {/* Search */}
+      {/* Search with New Chat */}
       <AnimatePresence>
         {!isCollapsed && (
           <motion.div
@@ -162,23 +147,34 @@ export default function Sidebar({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2, delay: 0.15 }}
-            className="px-3 py-2 border-b border-border"
+            className="px-3 py-3"
           >
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search conversations..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <Input
+                  placeholder="Search conversations..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8 bg-white/5 border-white/10 text-white placeholder:text-white/50 text-xs h-8"
+                />
+              </div>
+              <Button
+                onClick={onNewSession}
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 hover:bg-white/10 cursor-pointer flex-shrink-0"
+                title="New Chat"
+              >
+                <Plus className="h-3 w-3 text-white/70" />
+              </Button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Chat Sessions */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-hidden min-h-0">
         <AnimatePresence>
           {!isCollapsed && (
             <motion.div
@@ -186,7 +182,7 @@ export default function Sidebar({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2, delay: 0.2 }}
-              className="p-2 h-full"
+              className="px-2 py-4 h-full overflow-y-auto overflow-x-hidden sidebar-scroll"
             >
               <div className="space-y-1">
                 {filteredSessions.map((session) => (
@@ -199,10 +195,10 @@ export default function Sidebar({
                     className="group"
                   >
                     <div
-                      className={`cursor-pointer transition-all duration-200 rounded-lg px-3 py-2 hover:bg-accent/50 relative ${
+                      className={`cursor-pointer transition-all duration-200 rounded-md px-3 py-2 hover:bg-white/10 relative ${
                         currentSessionId === session.id
-                          ? "bg-accent/70 border-l-2 border-primary"
-                          : "bg-transparent hover:bg-accent/30"
+                          ? "bg-white/15"
+                          : "bg-transparent"
                       }`}
                       onClick={() => onSessionSelect(session.id)}
                     >
@@ -217,20 +213,13 @@ export default function Sidebar({
                                 if (e.key === "Enter") saveRename();
                                 if (e.key === "Escape") cancelRename();
                               }}
-                              className="h-6 text-sm border-0 bg-background/50 focus:bg-background"
+                              className="h-5 text-xs border-0 bg-black/20 focus:bg-black/30 text-white"
                               autoFocus
                             />
                           ) : (
-                            <>
-                              <h3 className="font-medium text-sm truncate leading-tight mb-1">
-                                {session.title}
-                              </h3>
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <span>{formatTimestamp(session.timestamp)}</span>
-                                <span className="w-1 h-1 bg-muted-foreground/50 rounded-full" />
-                                <span>{session.messageCount} msgs</span>
-                              </div>
-                            </>
+                            <h3 className="font-medium text-xs truncate leading-tight text-white/90">
+                              {session.title}
+                            </h3>
                           )}
                         </div>
 
@@ -239,13 +228,13 @@ export default function Sidebar({
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-accent/50 flex-shrink-0"
+                              className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10 flex-shrink-0"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <MoreHorizontal className="h-3 w-3" />
+                              <MoreHorizontal className="h-2.5 w-2.5" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-32">
+                          <DropdownMenuContent align="end" className="w-28">
                             <DropdownMenuItem
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -290,7 +279,7 @@ export default function Sidebar({
             <Button
               variant="ghost"
               size="sm"
-              className="w-full h-10 p-0"
+              className="w-full h-10 p-0 cursor-pointer"
               onClick={onNewSession}
             >
               <Plus className="h-4 w-4" />
@@ -298,7 +287,7 @@ export default function Sidebar({
             <Button
               variant="ghost"
               size="sm"
-              className="w-full h-10 p-0"
+              className="w-full h-10 p-0 cursor-pointer"
             >
               <History className="h-4 w-4" />
             </Button>
@@ -306,33 +295,79 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* Footer */}
-      <div className="p-3 border-t border-border flex-shrink-0">
+      {/* Footer - User Account */}
+      <div className="px-3 py-4 flex-shrink-0">
         <AnimatePresence>
           {!isCollapsed ? (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Button
-                variant="ghost"
-                className="w-full justify-start gap-2"
-                size="sm"
-              >
-                <Settings className="h-4 w-4" />
-                Settings
-              </Button>
-            </motion.div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex items-center gap-2.5 p-2 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage src="https://github.com/shadcn.png" alt="User Avatar" />
+                    <AvatarFallback className="bg-white/20 text-white text-[10px]">JD</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-white/90 truncate">John Doe</p>
+                    <p className="text-[10px] text-white/60 truncate">john.doe@example.com</p>
+                  </div>
+                </motion.div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" sideOffset={8} className="w-48 mb-2">
+                <DropdownMenuItem className="cursor-pointer">
+                  <User className="mr-2 h-3 w-3" />
+                  <span className="text-xs">Profile</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="cursor-pointer">
+                  <Settings className="mr-2 h-3 w-3" />
+                  <span className="text-xs">Settings</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="cursor-pointer">
+                  <CreditCard className="mr-2 h-3 w-3" />
+                  <span className="text-xs">Billing</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600">
+                  <LogOut className="mr-2 h-3 w-3" />
+                  <span className="text-xs">Sign out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full h-10 p-0"
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div className="flex justify-center cursor-pointer">
+                  <Avatar className="h-6 w-6 hover:ring-2 hover:ring-white/20 transition-all">
+                    <AvatarImage src="https://github.com/shadcn.png" alt="User Avatar" />
+                    <AvatarFallback className="bg-white/20 text-white text-[10px]">JD</AvatarFallback>
+                  </Avatar>
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" sideOffset={8} className="w-48 mb-2">
+                <DropdownMenuItem className="cursor-pointer">
+                  <User className="mr-2 h-3 w-3" />
+                  <span className="text-xs">Profile</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="cursor-pointer">
+                  <Settings className="mr-2 h-3 w-3" />
+                  <span className="text-xs">Settings</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="cursor-pointer">
+                  <CreditCard className="mr-2 h-3 w-3" />
+                  <span className="text-xs">Billing</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600">
+                  <LogOut className="mr-2 h-3 w-3" />
+                  <span className="text-xs">Sign out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </AnimatePresence>
       </div>
