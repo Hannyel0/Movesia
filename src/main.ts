@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import { createAppWindow } from './appWindow';
 import { registerUnityProjectHandlers } from './main/unity-project-ipc';
 import { WSChannels } from './channels/wsChannels';
-import { MovesiaWebSocketServer } from './services/websocket-server';
+import { MovesiaWebSocketServer } from './ws/server';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
