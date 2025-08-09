@@ -6,6 +6,7 @@ import { createAppWindow } from './appWindow';
 import { registerUnityProjectHandlers } from './main/unity-project-ipc';
 import { WSChannels } from './channels/wsChannels';
 import { MovesiaWebSocketServer } from './ws/server';
+import { startServices } from './orchestrator';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
@@ -29,6 +30,16 @@ function updateConnectionStatus() {
 }
 
 app.whenReady().then(async () => {
+  console.log("Movesia main: app.ready");
+  
+  // Initialize core services (SQLite, Qdrant, etc.)
+  try {
+    await startServices();
+    console.log("✅ Core services initialized");
+  } catch (err) {
+    console.error("❌ Service initialization error:", err);
+  }
+
   // Get the window instance from createAppWindow
   mainWindow = createAppWindow();
 
