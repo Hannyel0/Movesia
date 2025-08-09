@@ -4,7 +4,7 @@ import { registerMenuIpc } from '@/ipc/menuIPC';
 import appMenu from '@/menu/appMenu';
 import { registerWindowStateChangedEvents } from '@/windowState';
 
-import { BrowserWindow, Menu, app } from 'electron';
+import { BrowserWindow, Menu } from 'electron';
 import windowStateKeeper from 'electron-window-state';
 
 let appWindow: BrowserWindow;
@@ -14,6 +14,13 @@ let appWindow: BrowserWindow;
  * @returns { BrowserWindow } Application Window Instance
  */
 export function createAppWindow(): BrowserWindow {
+  // Prevent creating multiple windows
+  if (appWindow && !appWindow.isDestroyed()) {
+    appWindow.show();
+    appWindow.focus();
+    return appWindow;
+  }
+
   const defaultWidth = 1200;
   const defaultHeight = 850;
   const minWidth = 960;
@@ -76,9 +83,8 @@ export function createAppWindow(): BrowserWindow {
   savedWindowState.manage(appWindow);
 
   // Close all windows when main window is closed
-  appWindow.on('close', () => {
+  appWindow.on('closed', () => {
     appWindow = null;
-    app.quit();
   });
 
   return appWindow;
