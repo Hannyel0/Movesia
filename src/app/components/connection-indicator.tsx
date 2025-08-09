@@ -1,10 +1,24 @@
 import { useRendererListener } from '@/app/hooks';
 import { WSChannels } from '@/channels/wsChannels';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function ConnectionIndicator() {
   const [isConnected, setIsConnected] = useState(false);
+
+  // Request initial connection status when component mounts
+  useEffect(() => {
+    const getInitialStatus = async () => {
+      try {
+        const status = await window.electron.ipcRenderer.invoke('get-connection-status');
+        setIsConnected(status);
+      } catch (error) {
+        console.error('Failed to get initial connection status:', error);
+      }
+    };
+
+    getInitialStatus();
+  }, []);
 
   // Listen for connection status updates from main process
   useRendererListener(WSChannels.CONNECTION_STATUS, (_, connected: boolean) => {

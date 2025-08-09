@@ -9,6 +9,7 @@ export interface UnityProjectIPC {
   'unity:validate-project': (projectPath: string) => Promise<UnityProject | null>;
   'unity:select-project-dialog': () => Promise<UnityProject | null>;
   'unity:get-hub-candidates': () => Promise<string[]>;
+  'get-connection-status': () => Promise<boolean>;
 }
 
 // Extend the global electron interface
