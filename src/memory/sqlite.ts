@@ -64,24 +64,41 @@ export function logEvent(db: Database.Database, evt: DomainEvent) {
     });
 }
 
-export function upsertAssets(db: Database.Database, items: Array<{ guid: string; path: string; kind?: string; mtime?: number; size?: number; hash?: string; deps?: string[] }>, ts: number) {
+export function upsertAssets(db: Database.Database, items: Array<{ guid?: string; GUID?: string; id?: string; path?: string; kind?: string; mtime?: number; size?: number; hash?: string; sha256?: string; deps?: string[] }>, ts: number) {
     const upsert = db.prepare(`
     INSERT INTO assets(guid, path, kind, mtime, size, hash, deleted, updated_ts)
     VALUES (@guid, @path, @kind, @mtime, @size, @hash, 0, @ts)
     ON CONFLICT(guid) DO UPDATE SET
-      path=excluded.path, kind=COALESCE(excluded.kind, assets.kind),
-      mtime=excluded.mtime, size=excluded.size, hash=excluded.hash,
+      path=excluded.path, 
+      kind=COALESCE(excluded.kind, assets.kind),
+      mtime=COALESCE(excluded.mtime, assets.mtime), 
+      size=COALESCE(excluded.size, assets.size), 
+      hash=COALESCE(excluded.hash, assets.hash),
       deleted=0, updated_ts=excluded.updated_ts
   `);
     const upsertDep = db.prepare(`INSERT OR IGNORE INTO asset_deps(guid, dep) VALUES (?, ?)`);
-    const tx = db.transaction(() => {
-        for (const it of items) {
-            upsert.run({ ...it, ts });
+    const tx = db.transaction((rows: any[]) => {
+        for (const it of rows) {
+            const row = {
+                guid: it.guid ?? it.GUID ?? it.id,                          // required
+                path: typeof it.path === "string" ? it.path : "(unknown)",  // required
+                kind: typeof it.kind === "string" ? it.kind : null,
+                mtime: Number.isFinite(it.mtime) ? it.mtime : null,
+                size:  Number.isFinite(it.size)  ? it.size  : null,
+                // 🔑 ensure the 'hash' key always exists; map from sha256 if present
+                hash:  typeof it.sha256 === "string"
+                         ? it.sha256
+                         : (typeof it.hash === "string" ? it.hash : null),
+                ts
+            };
+            if (!row.guid || !row.path) continue; // skip clearly bad rows
+            upsert.run(row);
+
             const deps: string[] = Array.isArray(it.deps) ? it.deps : [];
-            for (const d of deps.slice(0, 200)) upsertDep.run(it.guid, d);
+            for (const d of deps.slice(0, 200)) upsertDep.run(row.guid, d);
         }
     });
-    tx();
+    tx(items);
 }
 
 export function markDeleted(db: Database.Database, items: Array<{ guid: string }>, ts: number) {

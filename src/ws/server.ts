@@ -16,6 +16,7 @@ export class MovesiaWebSocketServer {
     private heartbeat!: HeartbeatManager;
     private router!: MessageRouter;
     private cfg!: Required<WebSocketServerConfig>;
+    private listening = false;
 
     constructor(config: WebSocketServerConfig) {
         // 1) set cfg first
@@ -23,6 +24,7 @@ export class MovesiaWebSocketServer {
             tokenValidation: (t?: string) =>
                 typeof t === "string" && (t.length > 8 || t === "REPLACE_ME"),
             onConnectionChange: () => { },
+            onDomainEvent: () => { },
             ...config,
         };
 
@@ -35,12 +37,17 @@ export class MovesiaWebSocketServer {
 
         this.sessions = new SessionManager();
         this.heartbeat = new HeartbeatManager(this.wss);
-        this.router = new MessageRouter((ms) => this.heartbeat.suspend(ms));
+        this.router = new MessageRouter(
+            (ms) => this.heartbeat.suspend(ms),
+            this.cfg.onDomainEvent
+        );
     }
 
-    public async start() {
+    public async start(): Promise<void> {
+        if (this.listening) return;
         await new Promise<void>((resolve, reject) => {
             this.server.listen(this.cfg.port, () => {
+                this.listening = true;
                 console.log(`🚀 Movesia WebSocket server listening on :${this.cfg.port}`);
                 resolve();
             });

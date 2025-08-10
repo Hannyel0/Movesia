@@ -142,3 +142,47 @@ export async function findUnityProjects(extraRoots: string[] = []): Promise<Unit
 
   return results;
 }
+
+export async function readProductGUID(projectDir: string): Promise<string | undefined> {
+  try {
+    // ProjectSettings/ProjectSettings.asset is YAML-ish; fish out productGUID line
+    const txt = await fs.readFile(path.join(projectDir, "ProjectSettings", "ProjectSettings.asset"), "utf8");
+    // Typical line: productGUID: 00000000000000000000000000000000
+    const m = txt.match(/^\s*productGUID:\s*([0-9a-fA-F-]{16,})/m);
+    return m?.[1]?.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+export async function enrichWithProductGUID(projects: UnityProject[]) {
+  return Promise.all(projects.map(async p => ({
+    ...p,
+    productGUID: await readProductGUID(p.path)
+  } as UnityProject & { productGUID?: string })));
+}
+
+/**
+ * Find a Unity project by its normalized productGUID
+ */
+export async function findByProductGuid(normalizedGuid: string): Promise<string | undefined> {
+  try {
+    const projects = await findUnityProjects();
+    const enriched = await enrichWithProductGUID(projects);
+    
+    for (const project of enriched) {
+      if (project.productGUID) {
+        // Normalize the project GUID (remove dashes, lowercase)
+        const normalized = project.productGUID.replace(/-/g, "").toLowerCase();
+        if (normalized === normalizedGuid) {
+          return project.path;
+        }
+      }
+    }
+    
+    return undefined;
+  } catch (error) {
+    console.warn("Failed to find project by productGUID:", error);
+    return undefined;
+  }
+}

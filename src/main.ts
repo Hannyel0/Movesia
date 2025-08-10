@@ -1,60 +1,39 @@
-import { BrowserWindow, app, ipcMain } from 'electron';
+import { BrowserWindow, app } from 'electron';
 import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 import squirrelStartup from 'electron-squirrel-startup';
-import chalk from 'chalk';
+import path from 'node:path';
 import { createAppWindow } from './appWindow';
-import { registerUnityProjectHandlers } from './main/unity-project-ipc';
 import { WSChannels } from './channels/wsChannels';
 import { MovesiaWebSocketServer } from './ws/server';
-import { startServices } from './orchestrator';
+import { startServicesOnce } from './orchestrator';
+import { registerIpcHandlers, setConnectionStatus } from './ipc/register';
+import { findUnityProjects, enrichWithProductGUID } from './main/unity-project-scanner';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
-
-
 
 /** Handle creating/removing shortcuts on Windows when installing/uninstalling. */
 if (squirrelStartup) {
   app.quit();
 }
 
-// Track WebSocket connection status
-let isConnectedToUnity = false;
-let mainWindow: BrowserWindow | null = null;
-let wsServer: MovesiaWebSocketServer | null = null;
+// Optional: single instance lock
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
 
-// Function to update connection status in the renderer
-function updateConnectionStatus() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send(WSChannels.CONNECTION_STATUS, isConnectedToUnity);
-  }
-}
+let mainWindow: BrowserWindow | null = null;
 
 app.whenReady().then(async () => {
   console.log("Movesia main: app.ready");
-  
+
+  // Register IPC handlers first
+  registerIpcHandlers();
+
   // Initialize core services (SQLite, Qdrant, etc.)
-  try {
-    await startServices();
-    console.log("✅ Core services initialized");
-  } catch (err) {
-    console.error("❌ Service initialization error:", err);
-  }
+  const { indexer } = await startServicesOnce();
+  console.log("✅ Core services initialized");
 
   // Get the window instance from createAppWindow
   mainWindow = createAppWindow();
-
-  // Register Unity project IPC handlers
-  registerUnityProjectHandlers();
-
-  // Register connection status IPC handler
-  ipcMain.handle('get-connection-status', () => {
-    return isConnectedToUnity;
-  });
-
-  // Send initial connection status to renderer after a short delay to ensure renderer is ready
-  setTimeout(() => {
-    updateConnectionStatus();
-  }, 100);
 
   // Install React Developer Tools using modern Electron API
   if (process.env.NODE_ENV === 'development') {
@@ -71,28 +50,71 @@ app.whenReady().then(async () => {
   }
 
   // Start Movesia WebSocket server for Unity communication
-  wsServer = new MovesiaWebSocketServer({
+  const sessionRoots = new Map<string, string>(); // sessionId -> projectRoot
+
+  const server = new MovesiaWebSocketServer({
     port: 8765,
-    onConnectionChange: (connected: boolean) => {
-      isConnectedToUnity = connected;
-      updateConnectionStatus();
+    onConnectionChange(connected) {
+      setConnectionStatus(connected);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(WSChannels.CONNECTION_STATUS, connected);
+      }
+    },
+    onDomainEvent: async (msg) => {
+      if (msg.type === "hello") {
+        const h = msg.body as { productGUID?: string, cloudProjectId?: string, unityVersion?: string };
+        const projects = await findUnityProjects();                // your existing finder
+        const enriched = await enrichWithProductGUID(projects);    // add productGUIDs
+
+        // 1) Try productGUID match (strongest)
+        let pick = enriched.find(p => p.productGUID && p.productGUID.toLowerCase() === String(h.productGUID || "").toLowerCase());
+
+        // (Optional) 2) If you persist cloudProjectId->path in SQLite, you can try it here.
+
+        // (Optional) 3) If ambiguous, filter by version as a tie-breaker
+        if (!pick && h.unityVersion) {
+          pick = enriched.find(p => p.editorVersion && p.editorVersion.startsWith(h.unityVersion.split('.')[0]));
+        }
+
+        if (pick) {
+          sessionRoots.set(msg.session ?? "default", pick.path);
+          indexer.setSessionRoot(msg.session ?? "default", pick.path);
+          indexer.setProjectRoot(pick.path); // default/fallback for single-session
+          console.log("🎯 Matched session to project:", pick.path);
+          return;
+        }
+
+        console.warn("Could not match hello to any known Unity project; paths will fail until user picks one.");
+        // TODO: emit a UI prompt listing 'projects' to let the user select one; then call setSessionRoot
+        return;
+      }
+
+      // If the router already resolved a root, teach the indexer before routing
+      const session = msg.session ?? "default";
+      const resolvedRoot = (msg as any)._sessionRoot as string | undefined;
+      if (resolvedRoot) {
+        // set per-session root; optional: also set default project root
+        indexer.setSessionRoot(session, resolvedRoot);
+        // indexer.setProjectRoot(resolvedRoot); // optional fallback if you want one
+
+      }
+
+      // For asset/scene events: resolve using the session root
+      await indexer.handleUnityEvent({
+        ts: msg.ts, type: msg.type, session: msg.session, body: msg.body as Record<string, unknown>
+      });
     }
   });
 
-  // Start the WebSocket server
   try {
-    await wsServer.start();
-  } catch (error) {
-    console.error(chalk.red('Failed to start WebSocket server:'), error);
+    await server.start();
+    console.log("✅ WebSocket server started");
+  } catch (e) {
+    console.error('❌ Failed to start WS:', e);
   }
 });
 
-/**
- * This method will be called when Electron has finished
- * initialization and is ready to create browser windows.
- * Some APIs can only be used after this event occurs.
- */
-app.on('ready', createAppWindow);
+
 
 /**
  * Emitted when the application is activated. Various actions can
@@ -106,7 +128,7 @@ app.on('activate', () => {
    * dock icon is clicked and there are no other windows open.
    */
   if (BrowserWindow.getAllWindows().length === 0) {
-    createAppWindow();
+    mainWindow = createAppWindow();
   }
 });
 
@@ -124,13 +146,10 @@ app.on('window-all-closed', () => {
 });
 
 /**
- * Clean up WebSocket server when app is about to quit
+ * Clean up when app is about to quit
  */
 app.on('before-quit', async () => {
-  if (wsServer) {
-    console.log(chalk.yellow('Shutting down WebSocket server...'));
-    await wsServer.stop();
-  }
+  console.log('App shutting down...');
 });
 
 /**

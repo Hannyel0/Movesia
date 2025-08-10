@@ -17,11 +17,14 @@ export interface WebSocketServerConfig {
     port: number;
     tokenValidation?: (token?: string) => boolean;
     onConnectionChange?: (connected: boolean) => void;
+    onDomainEvent?: (msg: MovesiaMessage) => void;
 }
 
 export interface ExtendedWebSocket extends WebSocket {
     cid: string;
     session?: string;
+    sessionFromQuery?: string;
+    connSeq?: number;
     isAlive: boolean;
     missed: number;
     lastSeen: number;

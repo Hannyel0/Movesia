@@ -38,7 +38,10 @@ export async function upsertPoints(points: QdrantPoint[]) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ points }),
     });
-    if (!res.ok) throw new Error(`Qdrant upsert failed: ${res.status}`);
+    if (!res.ok) {
+        const text = await res.text(); // <-- dump details
+        throw new Error(`Qdrant upsert failed: ${res.status} — ${text}`);
+    }
 }
 
 export async function searchTopK(queryEmbedding: number[], k = 8, filter?: Record<string, unknown>, scoreThreshold?: number) {
@@ -56,4 +59,69 @@ export async function searchTopK(queryEmbedding: number[], k = 8, filter?: Recor
     if (!res.ok) throw new Error(`Qdrant search failed: ${res.status}`);
     const data = await res.json();
     return (data?.result ?? []) as Array<{ id: string; score: number; payload: Record<string, unknown> }>;
+}
+
+/**
+ * Hard delete points by relative path (recommended for file deletions)
+ */
+export async function deletePointsByPath(relPath: string) {
+    // Normalize path: forward slashes, no leading ./
+    const normalizedPath = relPath.replaceAll("\\", "/").replace(/^\.\//, "");
+    
+    const res = await fetch(`${BASE}/collections/${encodeURIComponent(COLLECTION)}/points/delete?wait=true`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+            filter: {
+                must: [
+                    { key: "rel_path", match: { value: normalizedPath } }
+                ]
+            }
+        }),
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Qdrant delete by path failed: ${res.status} — ${text}`);
+    }
+}
+
+/**
+ * Hard delete points by asset GUID
+ */
+export async function deletePointsByGuid(guid: string) {
+    // Normalize GUID: lowercase, no braces
+    const normalizedGuid = guid.toLowerCase().replace(/[{}]/g, "");
+    
+    const res = await fetch(`${BASE}/collections/${encodeURIComponent(COLLECTION)}/points/delete?wait=true`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+            filter: {
+                must: [
+                    { key: "guid", match: { value: normalizedGuid } }
+                ]
+            }
+        }),
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Qdrant delete by GUID failed: ${res.status} — ${text}`);
+    }
+}
+
+/**
+ * Hard delete points by explicit point IDs
+ */
+export async function deletePointsByIds(pointIds: (string | number)[]) {
+    const res = await fetch(`${BASE}/collections/${encodeURIComponent(COLLECTION)}/points/delete?wait=true`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+            points: pointIds
+        }),
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Qdrant delete by IDs failed: ${res.status} — ${text}`);
+    }
 }

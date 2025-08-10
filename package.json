@@ -29,8 +29,11 @@
     "ignoredBuiltDependencies": [
       "@tailwindcss/oxide",
       "better-sqlite3",
+      "cpu-features",
       "electron-winstaller",
       "esbuild",
+      "protobufjs",
+      "ssh2",
       "unrs-resolver"
     ]
   },
@@ -85,6 +88,7 @@
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.3.1",
     "tw-animate-css": "^1.3.4",
+    "uuid": "^11.1.0",
     "ws": "^8.18.3"
   },
   "devDependencies": {
