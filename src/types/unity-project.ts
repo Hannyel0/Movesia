@@ -10,6 +10,7 @@ export interface UnityProjectIPC {
   'unity:select-project-dialog': () => Promise<UnityProject | null>;
   'unity:get-hub-candidates': () => Promise<string[]>;
   'get-connection-status': () => Promise<boolean>;
+  'wipe-database': () => Promise<{ success: boolean; message: string }>;
 }
 
 // Extend the global electron interface

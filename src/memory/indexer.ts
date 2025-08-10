@@ -102,6 +102,9 @@ export class Indexer {
     }
 
     handleUnityEvent = async (evt: { ts: number; type: string; session?: string; body: Record<string, unknown> }) => {
+
+        if (evt.type === "hb" || evt.type === "hello" || evt.type === "ack") return;
+
         logEvent(this.db, evt);
 
         switch (evt.type) {
@@ -118,10 +121,10 @@ export class Indexer {
 
             case "assets_moved": {
                 const movedItems = (evt.body.items as Array<{ guid: string; path: string; from?: string; kind?: string; mtime?: number; size?: number; hash?: string; deps?: string[] }>) ?? [];
-                
+
                 // 1) Update SQLite with new paths
                 upsertAssets(this.db, movedItems, evt.ts);
-                
+
                 // 2) Handle Qdrant cleanup and re-indexing
                 for (const item of movedItems) {
                     try {
@@ -131,7 +134,7 @@ export class Indexer {
                             await deletePointsByPath(normalizedOldPath);
                             console.log(`🔄 Deleted old embeddings for moved file: ${normalizedOldPath}`);
                         }
-                        
+
                         // Re-index at new location (if it's a textual asset)
                         if (item.kind && (item.kind === "MonoScript" || item.kind === "TextAsset")) {
                             await this.indexTextualItems([item as { guid: string; path: string; kind: string }], evt, evt.ts);
@@ -146,10 +149,10 @@ export class Indexer {
 
             case "assets_deleted": {
                 const deletedItems = (evt.body.items as Array<{ guid: string; path: string }>) ?? [];
-                
+
                 // 1) Mark as deleted in SQLite
                 markDeleted(this.db, deletedItems, evt.ts);
-                
+
                 // 2) Clean up Qdrant vector store
                 for (const item of deletedItems) {
                     try {
@@ -159,7 +162,7 @@ export class Indexer {
                             await deletePointsByPath(normalizedPath);
                             console.log(`🗑️ Deleted vector embeddings for path: ${normalizedPath}`);
                         }
-                        
+
                         // Also delete by GUID as backup (in case path-based deletion missed anything)
                         if (item.guid) {
                             await deletePointsByGuid(item.guid);

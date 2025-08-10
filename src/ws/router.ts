@@ -8,10 +8,10 @@ import path from "node:path";
 export type SuspendFn = (ms: number) => void;
 
 type HelloBody = {
-  productGUID?: string;
-  cloudProjectId?: string;
-  unityVersion?: string;
-  dataPath?: string;
+    productGUID?: string;
+    cloudProjectId?: string;
+    unityVersion?: string;
+    dataPath?: string;
 };
 
 // Session management for robust handshake
@@ -21,7 +21,7 @@ const pending = new Map<string, MovesiaMessage[]>();
 // Helper functions
 const normGuid = (s?: string) => s?.replace(/-/g, "").toLowerCase();
 const rootFromDataPath = (dp?: string) =>
-  dp && /[\\/](Assets)[\\/]?$/i.test(dp) ? path.resolve(dp, "..") : undefined;
+    dp && /[\\/](Assets)[\\/]?$/i.test(dp) ? path.resolve(dp, "..") : undefined;
 
 export class MessageRouter {
     constructor(private suspend: SuspendFn, private onDomainEvent?: (msg: MovesiaMessage) => void) { }
@@ -62,7 +62,7 @@ export class MessageRouter {
         const q = pending.get(sess) ?? [];
         pending.delete(sess);
         console.log(`📤 Flushing ${q.length} buffered events for session [${sess}]`);
-        
+
         for (const evt of q) {
             await this.routeWithRoot(sess, root, evt);
         }
@@ -88,7 +88,7 @@ export class MessageRouter {
             ...msg,
             _sessionRoot: root
         };
-        
+
 
         this.onDomainEvent?.(enrichedMsg);
     }
@@ -126,7 +126,7 @@ export class MessageRouter {
 
     private isMovesiaMessage(x: unknown): x is MovesiaMessage {
         if (!x || typeof x !== "object" || x === null) return false;
-        
+
         const obj = x as Record<string, unknown>;
         return typeof obj.v === "number"
             && typeof obj.source === "string"
@@ -145,6 +145,10 @@ export class MessageRouter {
         try {
             if (msg.type === "hello") {
                 await this.handleHello(sess, msg.body as HelloBody);
+                return;
+            }
+
+            if (msg.type === "hb" || msg.type === "ack") {
                 return;
             }
 

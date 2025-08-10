@@ -1,6 +1,7 @@
 import Sidebar from '../components/sidebar';
 import ConnectionIndicator from '../components/connection-indicator';
 import { ProjectSelector } from '../components/project-selector';
+import DatabaseWipeButton from '../components/database-wipe-button';
 import {
   Select,
   SelectContent,
@@ -551,8 +552,9 @@ return (
         <ConnectionIndicator />
       </div>
 
-      {/* Project Selector */}
-      <div className="absolute top-4 right-4 z-10">
+      {/* Project Selector and Database Wipe Button */}
+      <div className="absolute top-4 right-4 z-10 flex items-center gap-3">
+        <DatabaseWipeButton />
         <ProjectSelector />
       </div>
 
