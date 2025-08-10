@@ -29,12 +29,7 @@ export class MessageRouter {
     /**
      * Handle robust Unity handshake and establish session-to-root mapping
      */
-    private async handleHello(sess: string, body: HelloBody): Promise<void> {
-        console.log(`🤝 Processing hello from session [${sess}]`, {
-            productGUID: body.productGUID?.substring(0, 8) + "...",
-            unityVersion: body.unityVersion,
-            hasDataPath: !!body.dataPath
-        });
+    private async handleHello(sess: string, msg: MovesiaMessage, body: HelloBody): Promise<void> {
 
         // 1) Try to match by productGUID (authoritative)
         const pg = normGuid(body.productGUID);
@@ -43,25 +38,23 @@ export class MessageRouter {
         // 2) Fallback: derive from dataPath (<project>/Assets)
         if (!root) {
             root = rootFromDataPath(body.dataPath);
-            if (root) {
-                console.log(`📁 Using dataPath fallback for session [${sess}]: ${root}`);
-            }
-        } else {
-            console.log(`🎯 Found project by productGUID for session [${sess}]: ${root}`);
         }
 
         if (!root) {
-            console.warn(`⚠️ Could not determine project root for session [${sess}] - keeping buffered`);
             return; // keep buffering until we learn it
         }
 
         sessionRoot.set(sess, root);
-        console.log(`✅ Session [${sess}] mapped to root: ${root}`);
+
+        // Make the hello deliver the resolved root to main:
+        const helloWithRoot = { ...msg, _sessionRoot: root };
+
+        // Important: call onDomainEvent with the augmented message
+        this.onDomainEvent?.(helloWithRoot);
 
         // 3) Flush buffered events
         const q = pending.get(sess) ?? [];
         pending.delete(sess);
-        console.log(`📤 Flushing ${q.length} buffered events for session [${sess}]`);
 
         for (const evt of q) {
             await this.routeWithRoot(sess, root, evt);
@@ -76,13 +69,12 @@ export class MessageRouter {
             pending.set(sess, []);
         }
         pending.get(sess)!.push(msg);
-        console.log(`📥 Buffered ${msg.type} for session [${sess}] (${pending.get(sess)!.length} total)`);
     }
 
     /**
      * Route domain events with established session root
      */
-    private async routeWithRoot(sess: string, root: string, msg: MovesiaMessage): Promise<void> {
+    private async routeWithRoot(_sess: string, root: string, msg: MovesiaMessage): Promise<void> {
         // Add root context to the message for indexer
         const enrichedMsg = {
             ...msg,
@@ -144,7 +136,7 @@ export class MessageRouter {
 
         try {
             if (msg.type === "hello") {
-                await this.handleHello(sess, msg.body as HelloBody);
+                await this.handleHello(sess, msg, msg.body as HelloBody);
                 return;
             }
 

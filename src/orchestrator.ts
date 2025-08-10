@@ -4,9 +4,10 @@ import { Indexer } from "./memory/indexer";
 import { ensureQdrantRunning } from "./memory/qdrant/ensure";
 import { ensureCollection } from "./memory/qdrant";
 import { LocalEmbedder } from "./memory/embedder";
+import type Database from "better-sqlite3";
 
 // Singleton guard for idempotent startup
-let bootPromise: Promise<{ db: any; indexer: Indexer }> | null = null;
+let bootPromise: Promise<{ db: Database.Database; indexer: Indexer }> | null = null;
 
 const embedder = new LocalEmbedder();
 

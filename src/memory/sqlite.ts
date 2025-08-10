@@ -77,7 +77,7 @@ export function upsertAssets(db: Database.Database, items: Array<{ guid?: string
       deleted=0, updated_ts=excluded.updated_ts
   `);
     const upsertDep = db.prepare(`INSERT OR IGNORE INTO asset_deps(guid, dep) VALUES (?, ?)`);
-    const tx = db.transaction((rows: any[]) => {
+    const tx = db.transaction((rows: Array<Record<string, unknown>>) => {
         for (const it of rows) {
             const row = {
                 guid: it.guid ?? it.GUID ?? it.id,                          // required

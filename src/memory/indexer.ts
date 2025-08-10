@@ -2,8 +2,7 @@
 import type Database from "better-sqlite3";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { chunkFile } from "./chunker";
-import { upsertPoints, ensureCollection, deletePointsByPath, deletePointsByGuid } from "./qdrant";
+import { upsertPoints, deletePointsByPath, deletePointsByGuid } from "./qdrant";
 import { logEvent, upsertAssets, markDeleted, upsertScene } from "./sqlite";
 import { makePointIdFromChunkKey } from "./ids";
 
@@ -22,7 +21,7 @@ export class Indexer {
 
     setProjectRoot(root: string) {
         this.projectRoot = root;
-        console.log(`📁 Unity project root set: ${root}`);
+
     }
 
     setSessionRoot(session: string, root: string) {
@@ -30,7 +29,7 @@ export class Indexer {
 
     }
 
-    private resolveAbsFrom(evt: { body: any; session?: string }, relOrAbs: string) {
+    private resolveAbsFrom(evt: { body: Record<string, unknown>; session?: string }, relOrAbs: string) {
         if (path.isAbsolute(relOrAbs)) return path.normalize(relOrAbs);
         const base = (evt.session && this.sessionRoots.get(evt.session)) || this.projectRoot;
         if (!base) throw new Error(`No project root set for session ${evt.session ?? "(none)"}; cannot resolve ${relOrAbs}`);
@@ -38,15 +37,16 @@ export class Indexer {
     }
 
     private async readFileWithRetry(abs: string, tries = 5) {
-        let lastErr: any;
+        let lastErr: Error;
         for (let i = 0; i < tries; i++) {
             try {
                 return await fs.readFile(abs, "utf8");
             }
-            catch (e: any) {
-                lastErr = e;
-                if (e?.code !== "ENOENT") throw e;
-                await new Promise(r => setTimeout(r, 150 * Math.pow(2, i))); // backoff
+            catch (e: unknown) {
+                const error = e as Error & { code?: string };
+                lastErr = error;
+                if (error?.code !== "ENOENT") throw error;
+                await new Promise(resolve => setTimeout(resolve, 150 * Math.pow(2, i))); // backoff
             }
         }
         throw lastErr;
@@ -187,14 +187,14 @@ export class Indexer {
         }
     };
 
-    private async indexTextualItems(items: Array<{ kind: string; path: string }>, evt: { body: any; session?: string }, ts: number) {
+    private async indexTextualItems(items: Array<{ kind: string; path: string }>, evt: { body: Record<string, unknown>; session?: string }, ts: number) {
         const textual = items.filter((x) => x.kind === "MonoScript" || x.kind === "TextAsset");
         for (const it of textual) {
             await this.indexScript(it.path, evt, ts);
         }
     }
 
-    private async indexScript(relPath: string, evt: { body: any; session?: string }, ts: number) {
+    private async indexScript(relPath: string, evt: { body: Record<string, unknown>; session?: string }, ts: number) {
         // 0) Remove stale vectors for this file first (handles edits cleanly)
         const normalizedPath = normalizeRel(relPath);
         await deletePointsByPath(normalizedPath); // ?wait=true is already in your helper
@@ -228,7 +228,7 @@ export class Indexer {
         await upsertPoints(points);
     }
 
-    private async indexScene(relPath: string, evt: { body: any; session?: string }, ts: number) {
+    private async indexScene(relPath: string, evt: { body: Record<string, unknown>; session?: string }, ts: number) {
         // 0) Remove stale vectors for this file first (handles edits cleanly)
         const normalizedPath = normalizeRel(relPath);
         await deletePointsByPath(normalizedPath); // ?wait=true is already in your helper

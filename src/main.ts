@@ -1,13 +1,13 @@
-import { BrowserWindow, app } from 'electron';
+import { BrowserWindow, app, ipcMain } from 'electron';
 import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 import squirrelStartup from 'electron-squirrel-startup';
 import path from 'node:path';
 import { createAppWindow } from './appWindow';
-import { WSChannels } from './channels/wsChannels';
+import { WSChannels, UNITY_CURRENT_PROJECT, UNITY_GET_CURRENT_PROJECT } from './channels/wsChannels';
 import { MovesiaWebSocketServer } from './ws/server';
 import { startServicesOnce } from './orchestrator';
 import { registerIpcHandlers, setConnectionStatus } from './ipc/register';
-import { findUnityProjects, enrichWithProductGUID } from './main/unity-project-scanner';
+import { findUnityProjects, enrichWithProductGUID, isUnityProject } from './main/unity-project-scanner';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
@@ -22,11 +22,22 @@ if (!gotLock) app.quit();
 
 let mainWindow: BrowserWindow | null = null;
 
+// Keep a ref to the last resolved project for the UI
+let currentUnityProject: { path: string; name: string; editorVersion?: string } | null = null;
+
+function norm(p: string) {
+  // normalize + force forward slashes + drop trailing slash
+  return path.normalize(p).replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
 app.whenReady().then(async () => {
   console.log("Movesia main: app.ready");
 
   // Register IPC handlers first
   registerIpcHandlers();
+
+  // Add Unity project IPC handler
+  ipcMain.handle(UNITY_GET_CURRENT_PROJECT, async () => currentUnityProject);
 
   // Initialize core services (SQLite, Qdrant, etc.)
   const { indexer } = await startServicesOnce();
@@ -62,41 +73,78 @@ app.whenReady().then(async () => {
     },
     onDomainEvent: async (msg) => {
       if (msg.type === "hello") {
-        const h = msg.body as { productGUID?: string, cloudProjectId?: string, unityVersion?: string };
-        const projects = await findUnityProjects();                // your existing finder
-        const enriched = await enrichWithProductGUID(projects);    // add productGUIDs
+        const h = msg.body as {
+          productGUID?: string;
+          cloudProjectId?: string;
+          unityVersion?: string;
+          dataPath?: string; // often missing in your payload
+        };
 
-        // 1) Try productGUID match (strongest)
-        let pick = enriched.find(p => p.productGUID && p.productGUID.toLowerCase() === String(h.productGUID || "").toLowerCase());
+        const projects  = await findUnityProjects();
+        const enriched  = await enrichWithProductGUID(projects);
+        const helloGUID = (h.productGUID || "").toLowerCase();
 
-        // (Optional) 2) If you persist cloudProjectId->path in SQLite, you can try it here.
+        let pick =
+          enriched.find(p => (p.productGUID || "").toLowerCase() === helloGUID) || null;
 
-        // (Optional) 3) If ambiguous, filter by version as a tie-breaker
+        // Fallback A: dataPath → <root> if you actually got a string
+        if (!pick && h.dataPath) {
+          const rootFromDataPath = norm(path.resolve(h.dataPath, ".."));
+          pick = enriched.find(p => norm(p.path) === rootFromDataPath)
+              || (await isUnityProject(rootFromDataPath)) || null;
+        }
+
+        // 🔧 Fallback B: _sessionRoot provided by the WS layer (your case)
+        // The WS server already mapped the session; use that root now (even on hello).
+        if (!pick) {
+          const resolvedRootFromWS = (msg as any)._sessionRoot as string | undefined;
+          if (resolvedRootFromWS) {
+            const root = norm(resolvedRootFromWS);
+            pick = enriched.find(p => norm(p.path) === root)
+                || (await isUnityProject(root)) || null;
+          }
+        }
+
+        // (optional) Fallback C: unityVersion tiebreaker
         if (!pick && h.unityVersion) {
-          pick = enriched.find(p => p.editorVersion && p.editorVersion.startsWith(h.unityVersion.split('.')[0]));
+          const major = h.unityVersion.split(".")[0];
+          pick = enriched.find(p => p.editorVersion?.startsWith(major)) || null;
         }
 
         if (pick) {
-          sessionRoots.set(msg.session ?? "default", pick.path);
-          indexer.setSessionRoot(msg.session ?? "default", pick.path);
-          indexer.setProjectRoot(pick.path); // default/fallback for single-session
-          console.log("🎯 Matched session to project:", pick.path);
+          const p = norm(pick.path);
+          indexer.setSessionRoot(msg.session ?? "default", p);
+          indexer.setProjectRoot(p);
+          currentUnityProject = { path: p, name: pick.name, editorVersion: pick.editorVersion };
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send(UNITY_CURRENT_PROJECT, currentUnityProject);
+          }
+
           return;
         }
 
         console.warn("Could not match hello to any known Unity project; paths will fail until user picks one.");
-        // TODO: emit a UI prompt listing 'projects' to let the user select one; then call setSessionRoot
         return;
       }
 
       // If the router already resolved a root, teach the indexer before routing
       const session = msg.session ?? "default";
-      const resolvedRoot = (msg as any)._sessionRoot as string | undefined;
+      const resolvedRoot = (msg as any)._sessionRoot;
       if (resolvedRoot) {
         // set per-session root; optional: also set default project root
         indexer.setSessionRoot(session, resolvedRoot);
         // indexer.setProjectRoot(resolvedRoot); // optional fallback if you want one
 
+        // if we didn't set a project on hello, synthesize it now
+        const proj = await isUnityProject(resolvedRoot);
+        if (proj) {
+          const p = norm(proj.path);
+          currentUnityProject = { path: p, name: proj.name, editorVersion: proj.editorVersion };
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send(UNITY_CURRENT_PROJECT, currentUnityProject);
+          }
+        }
       }
 
       // For asset/scene events: resolve using the session root
