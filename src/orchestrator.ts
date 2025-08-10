@@ -3,19 +3,12 @@ import { openMovesiaDB } from "./memory/sqlite";
 import { Indexer } from "./memory/indexer";
 import { ensureQdrantRunning } from "./memory/qdrant/ensure";
 import { ensureCollection } from "./memory/qdrant";
+import { LocalEmbedder } from "./memory/embedder";
 
 // Singleton guard for idempotent startup
 let bootPromise: Promise<{ db: any; indexer: Indexer }> | null = null;
 
-const embedder = {
-  dim: 384,
-  async embed(texts: string[]) {
-    // TEMP: return zero vectors so pipeline runs without crashing
-    // Replace with real embeddings ASAP (dim must match your collection).
-    // Qdrant expects point vectors to match collection size.
-    return texts.map(() => Array(384).fill(0));
-  }
-};
+const embedder = new LocalEmbedder();
 
 export async function startServices() {
   console.log("🚀 Starting Movesia services...");

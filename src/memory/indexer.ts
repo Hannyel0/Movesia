@@ -195,15 +195,28 @@ export class Indexer {
     }
 
     private async indexScript(relPath: string, evt: { body: any; session?: string }, ts: number) {
+        // 0) Remove stale vectors for this file first (handles edits cleanly)
+        const normalizedPath = normalizeRel(relPath);
+        await deletePointsByPath(normalizedPath); // ?wait=true is already in your helper
+        
         const abs = this.resolveAbsFrom(evt, relPath);
         const text = await this.readFileWithRetry(abs);
         const chunks = await this.chunkText(text, abs, "Script");
         const vectors = await this.embedder.embed(chunks.map(c => c.text));
+        
+        // Belt-and-suspenders guard: ensure vectors are valid before reaching Qdrant
+        if (vectors.length !== chunks.length || vectors.some(v => v.length !== this.embedder.dim)) {
+            throw new Error(`[embedding] invalid shape for ${normalizedPath}: expected ${chunks.length} vectors of dim ${this.embedder.dim}, got ${vectors.length} vectors with dims [${vectors.map(v => v.length).join(', ')}]`);
+        }
+        if (vectors.some(v => v.every(x => Math.abs(x) < 1e-12))) {
+            throw new Error(`[embedding] zero vectors detected for ${normalizedPath}: embeddings contain all-zero or near-zero vectors`);
+        }
+        
         const points = chunks.map((c, i) => ({
             id: c.id,
             vector: vectors[i],
             payload: {
-                rel_path: normalizeRel(relPath),
+                rel_path: normalizedPath,
                 range: `${c.line_start}-${c.line_end}`,
                 file_hash: c.hash,
                 kind: "Script",
@@ -216,15 +229,28 @@ export class Indexer {
     }
 
     private async indexScene(relPath: string, evt: { body: any; session?: string }, ts: number) {
+        // 0) Remove stale vectors for this file first (handles edits cleanly)
+        const normalizedPath = normalizeRel(relPath);
+        await deletePointsByPath(normalizedPath); // ?wait=true is already in your helper
+        
         const abs = this.resolveAbsFrom(evt, relPath);
         const text = await this.readFileWithRetry(abs);
         const chunks = await this.chunkText(text, abs, "Scene", 700, 30);
         const vectors = await this.embedder.embed(chunks.map(c => c.text));
+        
+        // Belt-and-suspenders guard: ensure vectors are valid before reaching Qdrant
+        if (vectors.length !== chunks.length || vectors.some(v => v.length !== this.embedder.dim)) {
+            throw new Error(`[embedding] invalid shape for ${normalizedPath}: expected ${chunks.length} vectors of dim ${this.embedder.dim}, got ${vectors.length} vectors with dims [${vectors.map(v => v.length).join(', ')}]`);
+        }
+        if (vectors.some(v => v.every(x => Math.abs(x) < 1e-12))) {
+            throw new Error(`[embedding] zero vectors detected for ${normalizedPath}: embeddings contain all-zero or near-zero vectors`);
+        }
+        
         const points = chunks.map((c, i) => ({
             id: c.id,
             vector: vectors[i],
             payload: {
-                rel_path: normalizeRel(relPath),
+                rel_path: normalizedPath,
                 range: `${c.line_start}-${c.line_end}`,
                 file_hash: c.hash,
                 kind: "Scene",
