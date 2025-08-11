@@ -16,6 +16,8 @@ function normalizeRel(p: string) {
 export class Indexer {
     private projectRoot: string | null = null;
     private sessionRoots = new Map<string, string>();
+    private paused = false;
+    private pendingEvents: Array<{ evt: any; resolve: () => void; reject: (err: Error) => void }> = [];
 
     constructor(private db: Database.Database, private embedder: Embedder) { }
 
@@ -102,6 +104,17 @@ export class Indexer {
     }
 
     handleUnityEvent = async (evt: { ts: number; type: string; session?: string; body: Record<string, unknown> }) => {
+        // If paused, queue the event for later processing
+        if (this.paused) {
+            return new Promise<void>((resolve, reject) => {
+                this.pendingEvents.push({ evt, resolve, reject });
+            });
+        }
+
+        return this.handleUnityEventInternal(evt);
+    };
+
+    private handleUnityEventInternal = async (evt: { ts: number; type: string; session?: string; body: Record<string, unknown> }) => {
 
         if (evt.type === "hb" || evt.type === "hello" || evt.type === "ack") return;
 
@@ -260,5 +273,41 @@ export class Indexer {
             }
         }));
         await upsertPoints(points);
+    }
+
+    /**
+     * Pause the indexer - queue new events instead of processing them
+     */
+    async pause(): Promise<void> {
+        this.paused = true;
+        // Wait for any in-flight operations to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    /**
+     * Resume the indexer - process queued events
+     */
+    async resume(): Promise<void> {
+        this.paused = false;
+        
+        // Process all pending events
+        const events = [...this.pendingEvents];
+        this.pendingEvents = [];
+        
+        for (const { evt, resolve, reject } of events) {
+            try {
+                await this.handleUnityEventInternal(evt);
+                resolve();
+            } catch (err) {
+                reject(err as Error);
+            }
+        }
+    }
+
+    /**
+     * Check if indexer is currently paused
+     */
+    isPaused(): boolean {
+        return this.paused;
     }
 }

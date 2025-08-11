@@ -8,6 +8,8 @@ import type Database from "better-sqlite3";
 
 // Singleton guard for idempotent startup
 let bootPromise: Promise<{ db: Database.Database; indexer: Indexer }> | null = null;
+let globalIndexer: Indexer | null = null;
+let globalRouter: any = null; // Will be set from main.ts
 
 const embedder = new LocalEmbedder();
 
@@ -29,6 +31,7 @@ export async function startServices() {
 
   // 3) Indexer
   const indexer = new Indexer(db, embedder);
+  globalIndexer = indexer;
 
   console.log("✅ Core services initialized");
   return { db, indexer };
@@ -38,4 +41,51 @@ export function startServicesOnce() {
   if (bootPromise) return bootPromise;
   bootPromise = startServices(); // your existing function
   return bootPromise;
+}
+
+/**
+ * Set the global router reference for pause/resume operations
+ */
+export function setGlobalRouter(router: any) {
+  globalRouter = router;
+}
+
+/**
+ * Pause all database writers before maintenance operations
+ */
+export async function pauseAllDbWriters(): Promise<void> {
+  console.log("🔒 Entering maintenance mode - pausing all DB writers");
+  
+  if (globalIndexer) {
+    await globalIndexer.pause();
+    console.log("  ✅ Indexer paused");
+  }
+  
+  if (globalRouter && typeof globalRouter.pauseDbWrites === 'function') {
+    await globalRouter.pauseDbWrites();
+    console.log("  ✅ Router DB writes paused");
+  }
+  
+  // Wait a bit more to ensure all in-flight operations complete
+  await new Promise(resolve => setTimeout(resolve, 200));
+  console.log("🔒 Maintenance mode active");
+}
+
+/**
+ * Resume all database writers after maintenance operations
+ */
+export async function resumeAllDbWriters(): Promise<void> {
+  console.log("🔓 Exiting maintenance mode - resuming all DB writers");
+  
+  if (globalRouter && typeof globalRouter.resumeDbWrites === 'function') {
+    globalRouter.resumeDbWrites();
+    console.log("  ✅ Router DB writes resumed");
+  }
+  
+  if (globalIndexer) {
+    await globalIndexer.resume();
+    console.log("  ✅ Indexer resumed");
+  }
+  
+  console.log("🔓 Normal operations resumed");
 }

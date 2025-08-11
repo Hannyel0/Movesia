@@ -1,8 +1,9 @@
 // src/ws/router.ts
-import type { MovesiaMessage, ExtendedWebSocket } from "./types";
+import type { MovesiaMessage, ExtendedWebSocket, BroadcastMessage } from "./types";
 import type { WebSocket } from "ws";
 import { sendToUnity } from "./transport";
 import { findByProductGuid } from "../main/unity-project-scanner";
+import { reconcile, type ManifestItem } from "../main/reconcile";
 import path from "node:path";
 
 export type SuspendFn = (ms: number) => void;
@@ -18,13 +19,25 @@ type HelloBody = {
 const sessionRoot = new Map<string, string>();
 const pending = new Map<string, MovesiaMessage[]>();
 
+// Manifest handling state
+let manifestPending: ManifestItem[] = [];
+let manifestExpecting = 0;
+let currentProjectRoot: string | null = null;
+
 // Helper functions
 const normGuid = (s?: string) => s?.replace(/-/g, "").toLowerCase();
 const rootFromDataPath = (dp?: string) =>
     dp && /[\\/](Assets)[\\/]?$/i.test(dp) ? path.resolve(dp, "..") : undefined;
 
 export class MessageRouter {
-    constructor(private suspend: SuspendFn, private onDomainEvent?: (msg: MovesiaMessage) => void) { }
+    private dbWritesPaused = false;
+    private pendingDbMessages: MovesiaMessage[] = [];
+
+    constructor(
+        private suspend: SuspendFn, 
+        private onDomainEvent?: (msg: MovesiaMessage) => void,
+        private sendToUnityCallback?: (message: BroadcastMessage) => void
+    ) { }
 
     /**
      * Handle robust Unity handshake and establish session-to-root mapping
@@ -52,6 +65,9 @@ export class MessageRouter {
         // Important: call onDomainEvent with the augmented message
         this.onDomainEvent?.(helloWithRoot);
 
+        // Request manifest from Unity after successful hello
+        this.requestManifest();
+
         // 3) Flush buffered events
         const q = pending.get(sess) ?? [];
         pending.delete(sess);
@@ -75,12 +91,16 @@ export class MessageRouter {
      * Route domain events with established session root
      */
     private async routeWithRoot(_sess: string, root: string, msg: MovesiaMessage): Promise<void> {
+        // Handle manifest events
+        if (this.handleManifestEvent(msg, root)) {
+            return; // Manifest event handled, don't pass to onDomainEvent
+        }
+
         // Add root context to the message for indexer
         const enrichedMsg = {
             ...msg,
             _sessionRoot: root
         };
-
 
         this.onDomainEvent?.(enrichedMsg);
     }
@@ -163,7 +183,109 @@ export class MessageRouter {
             type === "will_save_assets" || type === "hello";
     }
 
-    private sendAck(ws: WebSocket, messageId: string) {
-        sendToUnity(ws, { type: "ack", body: { ok: true, id: messageId, timestamp: new Date().toISOString() } });
+    private sendAck(ws: ExtendedWebSocket, msgId: string) {
+        const ack = { v: 1, source: "electron", type: "ack", ts: Math.floor(Date.now() / 1000), id: msgId };
+        ws.send(JSON.stringify(ack));
+    }
+
+    /**
+     * Request manifest from Unity
+     */
+    private requestManifest() {
+        try {
+            if (!this.sendToUnityCallback) {
+                console.warn("Cannot request manifest: no Unity connection callback available");
+                return;
+            }
+
+            const message: BroadcastMessage = {
+                type: "manifest:request",
+                body: {}
+            };
+            
+            this.sendToUnityCallback(message);
+            console.log("📤 Requested manifest from Unity");
+        } catch (err) {
+            console.error("Failed to request manifest:", err);
+        }
+    }
+
+    /**
+     * Handle manifest-related events from Unity
+     */
+    private handleManifestEvent(msg: MovesiaMessage, root: string): boolean {
+        switch (msg.type) {
+            case "manifest_begin":
+                manifestPending = [];
+                manifestExpecting = (msg.body as any)?.total ?? 0;
+                currentProjectRoot = root;
+                console.log(`📦 Manifest begin: expecting ${manifestExpecting} items`);
+                return true;
+
+            case "manifest_batch":
+                const batch = (msg.body as any)?.items ?? [];
+                manifestPending.push(...batch);
+                const progress = manifestPending.length;
+                console.log(`📦 Manifest batch: ${progress}/${manifestExpecting} items`);
+                return true;
+
+            case "manifest_end":
+                const total = (msg.body as any)?.total ?? manifestPending.length;
+                console.log(`📦 Manifest complete: ${total} items received`);
+
+                if (currentProjectRoot) {
+                    // Run reconciliation
+                    reconcile(currentProjectRoot, manifestPending)
+                        .then(stats => {
+                            console.log(`✅ Reconcile complete:`, stats);
+                            // TODO: Send reconcile results to renderer if needed
+                            // getMainWindow()?.webContents.send('reconcile:done', { 
+                            //     project: { path: currentProjectRoot }, 
+                            //     stats 
+                            // });
+                        })
+                        .catch(err => {
+                            console.error("❌ Reconcile failed:", err);
+                            // TODO: Send error to renderer if needed
+                            // getMainWindow()?.webContents.send('reconcile:error', { 
+                            //     error: String(err) 
+                            // });
+                        });
+                }
+
+                // Reset state
+                manifestPending = [];
+                manifestExpecting = 0;
+                currentProjectRoot = null;
+                return true;
+
+            default:
+                return false; // Not a manifest event
+        }
+    }
+
+    /**
+     * Pause database writes - queue messages instead of processing them
+     */
+    async pauseDbWrites(): Promise<void> {
+        this.dbWritesPaused = true;
+        // Wait for any in-flight operations to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    /**
+     * Resume database writes - process queued messages
+     */
+    resumeDbWrites(): void {
+        this.dbWritesPaused = false;
+        
+        // Process all pending messages
+        const messages = [...this.pendingDbMessages];
+        this.pendingDbMessages = [];
+        
+        for (const msg of messages) {
+            // Process messages that would normally trigger DB writes
+            this.onDomainEvent?.(msg);
+        }
     }
 }

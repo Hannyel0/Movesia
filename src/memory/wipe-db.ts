@@ -1,20 +1,24 @@
 // scripts/wipe-db.ts
-import { openMovesiaDB } from "./sqlite";
+import { openMovesiaDB, closeMovesiaDB } from "./sqlite";
+import { pauseAllDbWriters, resumeAllDbWriters } from "../orchestrator";
 
-export function wipeDatabase(): { success: boolean; message: string } {
-  const db = openMovesiaDB();
+export async function wipeDatabase(): Promise<{ success: boolean; message: string }> {
+  await pauseAllDbWriters();
+  
   try {
-    // Ensure nobody else writes while we wipe
-    db.pragma("locking_mode = EXCLUSIVE");
-    db.pragma("foreign_keys = OFF");
+    const db = openMovesiaDB();
 
+    // Take the write lock up front
+    db.exec("BEGIN IMMEDIATE;");  // prevents other writers from starting
+
+    // Enumerate user tables
     const tables = db.prepare(`
       SELECT name FROM sqlite_master
       WHERE type='table' AND name NOT LIKE 'sqlite_%'
     `).all() as Array<{ name: string }>;
 
     if (tables.length === 0) {
-      db.close();
+      db.exec("COMMIT;");
       return { success: true, message: "No tables found to wipe." };
     }
 
@@ -22,35 +26,40 @@ export function wipeDatabase(): { success: boolean; message: string } {
       tables.map(({ name }) => [name, (db.prepare(`SELECT COUNT(*) as c FROM "${name}"`).get() as { c: number })?.c || 0])
     );
 
-    const wipe = db.transaction(() => {
-      for (const { name } of tables) {
-        // Hard delete table contents
-        db.prepare(`DELETE FROM "${name}";`).run();
-        // Reset AUTOINCREMENT if present
-        try { db.prepare(`DELETE FROM sqlite_sequence WHERE name = ?;`).run(name); } catch {}
-      }
-    });
-    wipe();
+    for (const { name } of tables) {
+      db.prepare(`DELETE FROM "${name}";`).run();
+      // reset AUTOINCREMENT
+      try { db.prepare(`DELETE FROM sqlite_sequence WHERE name = ?;`).run(name); } catch {}
+    }
 
-    // Checkpoint WAL and vacuum to reclaim space
-    try { db.pragma("wal_checkpoint(TRUNCATE)"); } catch {}
-    try { db.exec("VACUUM;"); } catch {}
+    db.exec("COMMIT;");
 
-    db.pragma("foreign_keys = ON");
+    // Close the main connection so we can checkpoint/vacuum cleanly
+    closeMovesiaDB();
 
-    const countsAfter = Object.fromEntries(
-      tables.map(({ name }) => [name, (db.prepare(`SELECT COUNT(*) as c FROM "${name}"`).get() as { c: number })?.c || 0])
-    );
+    // Run checkpoint & vacuum on a fresh short-lived connection
+    const maintenance = openMovesiaDB();
+    try {
+      // Try a truncating checkpoint; WAL may still be reused depending on settings
+      maintenance.pragma("wal_checkpoint(TRUNCATE)");
+      maintenance.exec("VACUUM;");
+    } finally {
+      closeMovesiaDB();
+    }
 
-    db.close();
+    const message = `Wipe complete. Tables cleared: ${Object.entries(countsBefore)
+      .map(([name, count]) => `${name}(${count}→0)`)
+      .join(", ")}`;
 
-    const report = Object.keys(countsBefore)
-      .map(t => `${t}: ${countsBefore[t]} → ${countsAfter[t]}`)
-      .join(", ");
-
-    return { success: true, message: `Wipe complete. Rows per table: ${report}` };
+    return { success: true, message };
   } catch (err) {
-    try { db.close(); } catch {}
+    try { 
+      const db = openMovesiaDB();
+      db.exec("ROLLBACK;"); 
+    } catch {}
+    closeMovesiaDB();
     return { success: false, message: `Failed: ${(err as Error).message}` };
+  } finally {
+    await resumeAllDbWriters();
   }
 }

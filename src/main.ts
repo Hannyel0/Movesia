@@ -5,9 +5,10 @@ import path from 'node:path';
 import { createAppWindow } from './appWindow';
 import { WSChannels, UNITY_CURRENT_PROJECT, UNITY_GET_CURRENT_PROJECT } from './channels/wsChannels';
 import { MovesiaWebSocketServer } from './ws/server';
-import { startServicesOnce } from './orchestrator';
+import { startServicesOnce, setGlobalRouter } from './orchestrator';
 import { registerIpcHandlers, setConnectionStatus } from './ipc/register';
 import { findUnityProjects, enrichWithProductGUID, isUnityProject } from './main/unity-project-scanner';
+import { configureReconcile } from './main/reconcile';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
@@ -41,6 +42,7 @@ app.whenReady().then(async () => {
 
   // Initialize core services (SQLite, Qdrant, etc.)
   const { indexer } = await startServicesOnce();
+  configureReconcile({ indexer });
   console.log("✅ Core services initialized");
 
   // Get the window instance from createAppWindow

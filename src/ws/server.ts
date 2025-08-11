@@ -5,7 +5,7 @@ import { createHttpAndBindUpgrade } from "./upgrade";
 import { SessionManager } from "./sessions";
 import { HeartbeatManager } from "./heartbeat";
 import { MessageRouter } from "./router";
-import type { ExtendedWebSocket, WebSocketServerConfig } from "./types";
+import type { BroadcastMessage, ExtendedWebSocket, WebSocketServerConfig } from "./types";
 import { sendToUnity } from "./transport";
 
 export class MovesiaWebSocketServer {
@@ -39,7 +39,8 @@ export class MovesiaWebSocketServer {
         this.heartbeat = new HeartbeatManager(this.wss);
         this.router = new MessageRouter(
             (ms) => this.heartbeat.suspend(ms),
-            this.cfg.onDomainEvent
+            this.cfg.onDomainEvent,
+            (message) => this.broadcastToUnity(message)
         );
     }
 
@@ -63,6 +64,18 @@ export class MovesiaWebSocketServer {
             this.wss.close(() => {
                 this.server.close(() => resolve());
             });
+        });
+    }
+
+    /**
+     * Broadcast a message to all connected Unity clients
+     */
+    private broadcastToUnity(message: BroadcastMessage) {
+        this.wss.clients.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+                const ex = ws as ExtendedWebSocket;
+                sendToUnity(ex, message);
+            }
         });
     }
 
