@@ -13,6 +13,16 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/pop
 import type { UnityProject } from "../../types/unity-project";
 import { UNITY_CURRENT_PROJECT, UNITY_GET_CURRENT_PROJECT } from "../../channels/wsChannels";
 
+// Type definitions for Electron IPC events
+type IpcRendererEvent = {
+  sender: {
+    send: (channel: string, ...args: unknown[]) => void;
+  };
+  reply: (channel: string, ...args: unknown[]) => void;
+};
+
+type UnityProjectIpcHandler = (event: IpcRendererEvent, data: UnityProject) => void;
+
 function norm(p: string) {
   return p.replace(/\\/g, "/").replace(/\/+$/, "");
 }
@@ -55,7 +65,7 @@ export function ProjectSelector({ className }: ProjectSelectorProps) {
 
     return () => {
       if (typeof off === "function") off();
-      else window.electron.ipcRenderer.removeListener?.(UNITY_CURRENT_PROJECT, handler as any);
+      else window.electron.ipcRenderer.removeListener?.(UNITY_CURRENT_PROJECT, handler as UnityProjectIpcHandler);
     };
   }, []);
 
@@ -69,7 +79,7 @@ export function ProjectSelector({ className }: ProjectSelectorProps) {
         const current = await window.electron.ipcRenderer.invoke(UNITY_GET_CURRENT_PROJECT);
         if (current) setValue(norm(current.path));
       }
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to scan Unity projects");
     } finally {
       setIsLoading(false);
@@ -87,7 +97,7 @@ export function ProjectSelector({ className }: ProjectSelectorProps) {
         setUnityProjects(prev => dedupeByPath([...prev, np]));          // <-- fixed spread
         setValue(np.path);
       }
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to add project");
     }
     setOpen(false);

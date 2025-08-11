@@ -1,12 +1,24 @@
 // src/ws/router.ts
 import type { MovesiaMessage, ExtendedWebSocket, BroadcastMessage } from "./types";
 import type { WebSocket } from "ws";
-import { sendToUnity } from "./transport";
 import { findByProductGuid } from "../main/unity-project-scanner";
 import { reconcile, type ManifestItem } from "../main/reconcile";
 import path from "node:path";
 
 export type SuspendFn = (ms: number) => void;
+
+// Type definitions for manifest events
+interface ManifestBeginBody {
+    total?: number;
+}
+
+interface ManifestBatchBody {
+    items?: ManifestItem[];
+}
+
+interface ManifestEndBody {
+    total?: number;
+}
 
 type HelloBody = {
     productGUID?: string;
@@ -215,22 +227,24 @@ export class MessageRouter {
      */
     private handleManifestEvent(msg: MovesiaMessage, root: string): boolean {
         switch (msg.type) {
-            case "manifest_begin":
+            case "manifest_begin": {
                 manifestPending = [];
-                manifestExpecting = (msg.body as any)?.total ?? 0;
+                manifestExpecting = (msg.body as ManifestBeginBody)?.total ?? 0;
                 currentProjectRoot = root;
                 console.log(`📦 Manifest begin: expecting ${manifestExpecting} items`);
                 return true;
+            }
 
-            case "manifest_batch":
-                const batch = (msg.body as any)?.items ?? [];
+            case "manifest_batch": {
+                const batch = (msg.body as ManifestBatchBody)?.items ?? [];
                 manifestPending.push(...batch);
                 const progress = manifestPending.length;
                 console.log(`📦 Manifest batch: ${progress}/${manifestExpecting} items`);
                 return true;
+            }
 
-            case "manifest_end":
-                const total = (msg.body as any)?.total ?? manifestPending.length;
+            case "manifest_end": {
+                const total = (msg.body as ManifestEndBody)?.total ?? manifestPending.length;
                 console.log(`📦 Manifest complete: ${total} items received`);
 
                 if (currentProjectRoot) {
@@ -258,6 +272,7 @@ export class MessageRouter {
                 manifestExpecting = 0;
                 currentProjectRoot = null;
                 return true;
+            }
 
             default:
                 return false; // Not a manifest event

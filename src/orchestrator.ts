@@ -6,10 +6,16 @@ import { ensureCollection } from "./memory/qdrant";
 import { LocalEmbedder } from "./memory/embedder";
 import type Database from "better-sqlite3";
 
+// Type for the router with pause/resume capabilities
+export interface RouterWithPause {
+  pauseDbWrites(): Promise<void>;
+  resumeDbWrites(): void;
+}
+
 // Singleton guard for idempotent startup
 let bootPromise: Promise<{ db: Database.Database; indexer: Indexer }> | null = null;
 let globalIndexer: Indexer | null = null;
-let globalRouter: any = null; // Will be set from main.ts
+let globalRouter: RouterWithPause | null = null; // Will be set from main.ts
 
 const embedder = new LocalEmbedder();
 
@@ -46,7 +52,7 @@ export function startServicesOnce() {
 /**
  * Set the global router reference for pause/resume operations
  */
-export function setGlobalRouter(router: any) {
+export function setGlobalRouter(router: RouterWithPause) {
   globalRouter = router;
 }
 

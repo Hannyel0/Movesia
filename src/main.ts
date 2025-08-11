@@ -5,7 +5,8 @@ import path from 'node:path';
 import { createAppWindow } from './appWindow';
 import { WSChannels, UNITY_CURRENT_PROJECT, UNITY_GET_CURRENT_PROJECT } from './channels/wsChannels';
 import { MovesiaWebSocketServer } from './ws/server';
-import { startServicesOnce, setGlobalRouter } from './orchestrator';
+import type { MovesiaMessage } from './ws/types';
+import { startServicesOnce } from './orchestrator';
 import { registerIpcHandlers, setConnectionStatus } from './ipc/register';
 import { findUnityProjects, enrichWithProductGUID, isUnityProject } from './main/unity-project-scanner';
 import { configureReconcile } from './main/reconcile';
@@ -63,7 +64,6 @@ app.whenReady().then(async () => {
   }
 
   // Start Movesia WebSocket server for Unity communication
-  const sessionRoots = new Map<string, string>(); // sessionId -> projectRoot
 
   const server = new MovesiaWebSocketServer({
     port: 8765,
@@ -99,7 +99,7 @@ app.whenReady().then(async () => {
         // 🔧 Fallback B: _sessionRoot provided by the WS layer (your case)
         // The WS server already mapped the session; use that root now (even on hello).
         if (!pick) {
-          const resolvedRootFromWS = (msg as any)._sessionRoot as string | undefined;
+          const resolvedRootFromWS = (msg as MovesiaMessage & { _sessionRoot?: string })._sessionRoot;
           if (resolvedRootFromWS) {
             const root = norm(resolvedRootFromWS);
             pick = enriched.find(p => norm(p.path) === root)
@@ -132,7 +132,7 @@ app.whenReady().then(async () => {
 
       // If the router already resolved a root, teach the indexer before routing
       const session = msg.session ?? "default";
-      const resolvedRoot = (msg as any)._sessionRoot;
+      const resolvedRoot = (msg as MovesiaMessage & { _sessionRoot?: string })._sessionRoot;
       if (resolvedRoot) {
         // set per-session root; optional: also set default project root
         indexer.setSessionRoot(session, resolvedRoot);

@@ -8,6 +8,13 @@ import { makePointIdFromChunkKey } from "./ids";
 
 export type Embedder = { dim: number; embed(texts: string[]): Promise<number[][]> };
 
+export type UnityEvent = {
+    ts: number;
+    type: string;
+    session?: string;
+    body: Record<string, unknown>;
+};
+
 function normalizeRel(p: string) {
     // Store a normalized relative path (forward slashes)
     return p.replaceAll("\\", "/");
@@ -17,7 +24,7 @@ export class Indexer {
     private projectRoot: string | null = null;
     private sessionRoots = new Map<string, string>();
     private paused = false;
-    private pendingEvents: Array<{ evt: any; resolve: () => void; reject: (err: Error) => void }> = [];
+    private pendingEvents: Array<{ evt: UnityEvent; resolve: () => void; reject: (err: Error) => void }> = [];
 
     constructor(private db: Database.Database, private embedder: Embedder) { }
 

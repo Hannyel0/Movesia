@@ -35,7 +35,10 @@ export async function reconcile(_projectRoot: string, items: ManifestItem[]): Pr
     const seen = new Set<string>();
 
     const now = Math.floor(Date.now() / 1000);
-    let added = 0, deleted = 0, moved = 0, modified = 0;
+    let added = 0;
+    let deleted = 0;
+    let moved = 0;
+    let modified = 0;
 
     const toUpsert: ManifestItem[] = [];
     const toReindex: ManifestItem[] = [];
