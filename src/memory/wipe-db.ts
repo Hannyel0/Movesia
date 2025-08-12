@@ -1,26 +1,32 @@
 // scripts/wipe-db.ts
 import { openMovesiaDB, closeMovesiaDB } from "./sqlite";
 import { pauseAllDbWriters, resumeAllDbWriters } from "../orchestrator";
+import { waitQdrantReady, dropCollection, createCollection, ensurePayloadIndex } from "../memory/qdrant";
+
+const DIM = 384; // your embedding size
 
 export async function wipeDatabase(): Promise<{ success: boolean; message: string }> {
   await pauseAllDbWriters();
-  
   try {
+    // --- QDRANT FIRST ---
+    await waitQdrantReady().catch(() => {/* if Qdrant is down, we'll just wipe SQLite */});
+    try {
+      await dropCollection();               // safest wipe
+      await createCollection(DIM);          // recreate with on_disk_payload: false
+      await ensurePayloadIndex("rel_path", "keyword"); // if you filter on it
+      await ensurePayloadIndex("guid", "keyword");
+    } catch (e) {
+      console.warn("Qdrant wipe skipped/failed:", (e as Error).message);
+    }
+
+    // --- SQLITE NEXT (your existing code) ---
     const db = openMovesiaDB();
+    db.exec("BEGIN IMMEDIATE;");
 
-    // Take the write lock up front
-    db.exec("BEGIN IMMEDIATE;");  // prevents other writers from starting
-
-    // Enumerate user tables
     const tables = db.prepare(`
       SELECT name FROM sqlite_master
       WHERE type='table' AND name NOT LIKE 'sqlite_%'
     `).all() as Array<{ name: string }>;
-
-    if (tables.length === 0) {
-      db.exec("COMMIT;");
-      return { success: true, message: "No tables found to wipe." };
-    }
 
     const countsBefore = Object.fromEntries(
       tables.map(({ name }) => [name, (db.prepare(`SELECT COUNT(*) as c FROM "${name}"`).get() as { c: number })?.c || 0])
@@ -28,21 +34,15 @@ export async function wipeDatabase(): Promise<{ success: boolean; message: strin
 
     for (const { name } of tables) {
       db.prepare(`DELETE FROM "${name}";`).run();
-      // reset AUTOINCREMENT
       try { db.prepare(`DELETE FROM sqlite_sequence WHERE name = ?;`).run(name); } catch {}
     }
-
     db.exec("COMMIT;");
-
-    // Close the main connection so we can checkpoint/vacuum cleanly
     closeMovesiaDB();
 
-    // Run checkpoint & vacuum on a fresh short-lived connection
     const maintenance = openMovesiaDB();
     try {
-      // Try a truncating checkpoint; WAL may still be reused depending on settings
-      maintenance.pragma("wal_checkpoint(TRUNCATE)");
-      maintenance.exec("VACUUM;");
+      maintenance.pragma("wal_checkpoint(TRUNCATE)"); // trims WAL
+      maintenance.exec("VACUUM;");                   // rebuilds db file
     } finally {
       closeMovesiaDB();
     }
@@ -53,10 +53,7 @@ export async function wipeDatabase(): Promise<{ success: boolean; message: strin
 
     return { success: true, message };
   } catch (err) {
-    try { 
-      const db = openMovesiaDB();
-      db.exec("ROLLBACK;"); 
-    } catch {}
+    try { openMovesiaDB().exec("ROLLBACK;"); } catch {}
     closeMovesiaDB();
     return { success: false, message: `Failed: ${(err as Error).message}` };
   } finally {

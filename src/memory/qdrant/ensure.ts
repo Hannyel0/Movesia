@@ -13,6 +13,8 @@ const docker = process.platform === "win32"
 
 export async function ensureQdrantRunning(opts?: { apiKey?: string; port?: number }) {
     console.log("🐳 Starting Qdrant container setup...");
+
+    const IMAGE = "qdrant/qdrant:v1.15.1";
     
     // 1) Verify Docker is running
     console.log("🔍 Checking Docker availability...");
@@ -45,7 +47,7 @@ export async function ensureQdrantRunning(opts?: { apiKey?: string; port?: numbe
         // Pull image
         console.log("📥 Pulling Qdrant Docker image (this may take a few minutes)...");
         await new Promise<void>((resolve, reject) =>
-            docker.pull("qdrant/qdrant", (err: Error | null, stream: NodeJS.ReadableStream) => {
+            docker.pull(IMAGE, (err: Error | null, stream: NodeJS.ReadableStream) => {
                 if (err) {
                     console.error("❌ Failed to pull Qdrant image:", err.message);
                     return reject(err);
@@ -66,7 +68,7 @@ export async function ensureQdrantRunning(opts?: { apiKey?: string; port?: numbe
         console.log(`🔧 Creating container '${name}' with persistent storage...`);
         container = await docker.createContainer({
             name,
-            Image: "qdrant/qdrant",
+            Image: IMAGE,
             Env: opts?.apiKey ? [`QDRANT__SERVICE__API_KEY=${opts.apiKey}`] : [],
             ExposedPorts: { "6333/tcp": {}, "6334/tcp": {} },
             HostConfig: {

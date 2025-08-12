@@ -9,6 +9,54 @@ export type QdrantPoint = {
 const BASE = process.env.QDRANT_URL ?? "http://127.0.0.1:6333";
 const COLLECTION = process.env.QDRANT_COLLECTION ?? "movesia";
 
+// 1) wait until Qdrant is ready
+export async function waitQdrantReady(timeoutMs = 15000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const r = await fetch(`${BASE}/readyz`);
+      if (r.ok) return;
+    } catch {}
+    await new Promise(r => setTimeout(r, 300));
+  }
+  throw new Error("Qdrant not ready");
+}
+
+// 2) drop collection completely (fast & reliable)
+export async function dropCollection() {
+  const res = await fetch(`${BASE}/collections/${encodeURIComponent(COLLECTION)}`, {
+    method: "DELETE"
+  });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`Qdrant drop failed: ${res.status} — ${await res.text()}`);
+  }
+}
+
+// 3) recreate with RAM payload to avoid Gridstore during dev
+export async function createCollection(dim: number) {
+  const res = await fetch(`${BASE}/collections/${encodeURIComponent(COLLECTION)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      vectors: { size: dim, distance: "Cosine" },
+      on_disk_payload: false   // was true; keep it false for stability
+    }),
+  });
+  if (!res.ok && res.status !== 409) {
+    throw new Error(`Qdrant create failed: ${res.status} — ${await res.text()}`);
+  }
+}
+
+// 4) optional but recommended: index fields you filter on
+export async function ensurePayloadIndex(field: string, schema: "keyword" | "text" = "keyword") {
+  const res = await fetch(`${BASE}/collections/${encodeURIComponent(COLLECTION)}/index`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ field_name: field, field_schema: schema }),
+  });
+  if (!res.ok) throw new Error(`Qdrant index(${field}) failed: ${res.status} — ${await res.text()}`);
+}
+
 export async function ensureCollection(dim: number) {
     // 1) Fast path: exists?
     const existsRes = await fetch(`${BASE}/collections/${encodeURIComponent(COLLECTION)}/exists`);
@@ -23,7 +71,7 @@ export async function ensureCollection(dim: number) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ 
             vectors: { size: dim, distance: "Cosine" }, 
-            on_disk_payload: true 
+            on_disk_payload: false   // keep it false for stability 
         }),
     });
 
@@ -61,6 +109,29 @@ export async function searchTopK(queryEmbedding: number[], k = 8, filter?: Recor
     return (data?.result ?? []) as Array<{ id: string; score: number; payload: Record<string, unknown> }>;
 }
 
+async function scrollIdsByPath(path: string): Promise<(string|number)[]> {
+  const ids: (string|number)[] = [];
+  let offset: string | number | null = null;
+  while (true) {
+    const res = await fetch(`${BASE}/collections/${encodeURIComponent(COLLECTION)}/points/scroll`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        filter: { must: [{ key: "rel_path", match: { value: path } }] },
+        with_payload: false,
+        limit: 1024,
+        offset
+      })
+    });
+    if (!res.ok) throw new Error(`Qdrant scroll failed: ${res.status} — ${await res.text()}`);
+    const j = await res.json();
+    ids.push(...(j.result?.points?.map((p: any) => p.id) ?? []));
+    offset = j.result?.next_page_offset ?? null;
+    if (!offset) break;
+  }
+  return ids;
+}
+
 /**
  * Hard delete points by relative path (recommended for file deletions)
  */
@@ -68,21 +139,9 @@ export async function deletePointsByPath(relPath: string) {
     // Normalize path: forward slashes, no leading ./
     const normalizedPath = relPath.replaceAll("\\", "/").replace(/^\.\//, "");
     
-    const res = await fetch(`${BASE}/collections/${encodeURIComponent(COLLECTION)}/points/delete?wait=true`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-            filter: {
-                must: [
-                    { key: "rel_path", match: { value: normalizedPath } }
-                ]
-            }
-        }),
-    });
-    if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Qdrant delete by path failed: ${res.status} — ${text}`);
-    }
+    const ids = await scrollIdsByPath(normalizedPath);
+    if (!ids.length) return;
+    await deletePointsByIds(ids);
 }
 
 /**

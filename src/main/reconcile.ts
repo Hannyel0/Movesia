@@ -11,6 +11,7 @@ export type ManifestItem = {
     mtime?: number | null;
     size?: number | null;
     hash?: string | null;
+    deps?: string[];
 };
 
 export type ReconcileStats = { added: number; deleted: number; moved: number; modified: number; };
@@ -90,7 +91,13 @@ export async function reconcile(_projectRoot: string, items: ManifestItem[]): Pr
     // Persist upserts for added/moved/modified rows
     if (toUpsert.length) {
         upsertAssets(db, toUpsert.map(it => ({
-            guid: it.guid, path: it.path, kind: it.kind, mtime: it.mtime, size: it.size, hash: it.hash
+            guid: it.guid, 
+            path: it.path, 
+            kind: it.kind, 
+            mtime: it.mtime, 
+            size: it.size, 
+            hash: it.hash, 
+            deps: it.deps ?? []
         })), now);
     }
 
