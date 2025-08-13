@@ -128,7 +128,7 @@ function IndexingStatusIcon({ status, isLoading }: { status: IndexingStatus | nu
   
   return (
     <div className="relative">
-      <Database className="h-5 w-5 text-muted-foreground" />
+      <Database className="h-4 w-4 opacity-60" style={{ filter: 'brightness(0) saturate(100%) invert(60%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(90%) contrast(90%)' }} />
       <div className={`absolute -top-1 -right-1 h-2 w-2 ${getDotColor(status.phase)} rounded-full ${
         isActive ? 'animate-pulse' : ''
       }`} />

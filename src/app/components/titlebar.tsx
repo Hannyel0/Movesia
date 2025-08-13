@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import Menu from './menu';
 import WindowControls from './window-controls';
 import { IndexingStatusComponent } from './indexing-status';
+import { UnityConnectionStatus } from './unity-connection-status';
 
 const handleDoubleClick = () => {
   electron.ipcRenderer.invoke(MenuChannels.WINDOW_TOGGLE_MAXIMIZE);
@@ -47,6 +48,7 @@ export default function Titlebar () {
             className="flex items-center gap-2"
             style={{ WebkitAppRegion: 'no-drag', paddingRight: `calc(var(--wcw, ${wcw}px) + 8px)` } as React.CSSProperties}
           >
+            <UnityConnectionStatus />
             <IndexingStatusComponent />
           </div>
           <WindowControls id="window-controls" windowState={windowState} />
@@ -54,7 +56,10 @@ export default function Titlebar () {
       )}
       {__DARWIN__ && (
         <div className="flex-1 flex justify-end items-center pr-4" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          <IndexingStatusComponent />
+          <div className="flex items-center gap-2">
+            <UnityConnectionStatus />
+            <IndexingStatusComponent />
+          </div>
         </div>
       )}
     </div>

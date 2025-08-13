@@ -1,5 +1,5 @@
 import Sidebar from '../components/sidebar';
-import ConnectionIndicator from '../components/connection-indicator';
+
 import { ProjectSelector } from '../components/project-selector';
 import DatabaseWipeButton from '../components/database-wipe-button';
 
@@ -548,11 +548,6 @@ return (
     
     {/* Main Content */}
     <div className="flex-1 relative" style={{ backgroundColor: "#1B1B1B" }}>
-      {/* Unity Connection Status Indicator */}
-      <div className="absolute top-4 left-4 z-10">
-        <ConnectionIndicator />
-      </div>
-
       {/* Project Selector and Database Wipe Button */}
       <div className="absolute top-4 right-4 z-10 flex items-center gap-3">
         <DatabaseWipeButton />
