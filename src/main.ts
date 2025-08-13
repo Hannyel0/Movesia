@@ -2,6 +2,7 @@ import { BrowserWindow, app, ipcMain } from 'electron';
 import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 import squirrelStartup from 'electron-squirrel-startup';
 import path from 'node:path';
+import type Database from 'better-sqlite3';
 import { createAppWindow } from './appWindow';
 import { WSChannels, UNITY_CURRENT_PROJECT, UNITY_GET_CURRENT_PROJECT } from './channels/wsChannels';
 import { MovesiaWebSocketServer } from './ws/server';
@@ -10,6 +11,9 @@ import { startServicesOnce } from './orchestrator';
 import { registerIpcHandlers, setConnectionStatus } from './ipc/register';
 import { findUnityProjects, enrichWithProductGUID, isUnityProject } from './main/unity-project-scanner';
 import { configureReconcile } from './main/reconcile';
+import { indexingBus, type IndexingStatus } from './memory/progress';
+import { readIndexState } from './memory/sqlite';
+import { computeSnapshotFromAssets, computeProjectId } from './memory/indexer';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
@@ -27,6 +31,35 @@ let mainWindow: BrowserWindow | null = null;
 // Keep a ref to the last resolved project for the UI
 let currentUnityProject: { path: string; name: string; editorVersion?: string } | null = null;
 
+// Verify and announce index status on project connection
+async function verifyAndAnnounceIndexStatus(db: Database.Database, projectId: string) {
+  try {
+    const { sha, total } = computeSnapshotFromAssets(db);
+    const prior = readIndexState(db, projectId);
+
+    if (prior && prior.snapshot_sha === sha && prior.total_items === total) {
+      const s: IndexingStatus = {
+        phase: 'complete',
+        total,
+        done: total,
+        qdrantPoints: prior.qdrant_count ?? undefined,
+        message: 'Fully indexed (verified)',
+      };
+      lastIndexingStatus = s; // ← cache it
+      for (const win of BrowserWindow.getAllWindows()) win.webContents.send('indexing:status', s);
+    } else {
+      const s: IndexingStatus = { phase: 'scanning', total: 0, done: 0, message: 'Checking for changes…' };
+      lastIndexingStatus = s; // ← cache this too
+      for (const win of BrowserWindow.getAllWindows()) win.webContents.send('indexing:status', s);
+    }
+  } catch (error) {
+    console.warn('Failed to verify index status:', error);
+  }
+}
+
+// Keep track of indexing status for the UI
+let lastIndexingStatus: IndexingStatus = { phase: 'idle', total: 0, done: 0 };
+
 function norm(p: string) {
   // normalize + force forward slashes + drop trailing slash
   return path.normalize(p).replace(/\\/g, "/").replace(/\/+$/, "");
@@ -40,6 +73,17 @@ app.whenReady().then(async () => {
 
   // Add Unity project IPC handler
   ipcMain.handle(UNITY_GET_CURRENT_PROJECT, async () => currentUnityProject);
+
+  // Add indexing status IPC handlers
+  ipcMain.handle('indexing:getStatus', async () => lastIndexingStatus);
+
+  // Bridge indexing events to all renderer windows
+  indexingBus.on('status', (status: IndexingStatus) => {
+    lastIndexingStatus = status;
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('indexing:status', status);
+    }
+  });
 
   // Initialize core services (SQLite, Qdrant, etc.)
   const { indexer } = await startServicesOnce();
@@ -115,6 +159,7 @@ app.whenReady().then(async () => {
 
         if (pick) {
           const p = norm(pick.path);
+          const projectId = computeProjectId(p);  // ← same id writer uses
           indexer.setSessionRoot(msg.session ?? "default", p);
           indexer.setProjectRoot(p);
           currentUnityProject = { path: p, name: pick.name, editorVersion: pick.editorVersion };
@@ -122,6 +167,10 @@ app.whenReady().then(async () => {
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send(UNITY_CURRENT_PROJECT, currentUnityProject);
           }
+
+          // Verify and announce index status for connected project
+          const { db } = await startServicesOnce();
+          await verifyAndAnnounceIndexStatus(db, projectId); // ← pass the matched id
 
           return;
         }
@@ -142,10 +191,15 @@ app.whenReady().then(async () => {
         const proj = await isUnityProject(resolvedRoot);
         if (proj) {
           const p = norm(proj.path);
+          const projectId = computeProjectId(p);  // ← same id writer uses
           currentUnityProject = { path: p, name: proj.name, editorVersion: proj.editorVersion };
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send(UNITY_CURRENT_PROJECT, currentUnityProject);
           }
+
+          // Verify and announce index status for connected project
+          const { db } = await startServicesOnce();
+          await verifyAndAnnounceIndexStatus(db, projectId); // ← pass the matched id
         }
       }
 

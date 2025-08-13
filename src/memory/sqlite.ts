@@ -11,6 +11,14 @@ export type DomainEvent = {
   body: Record<string, unknown>;
 };
 
+export interface IndexState {
+  project_id: string;
+  snapshot_sha: string;
+  total_items: number;
+  qdrant_count: number | null;
+  completed_at: number;
+}
+
 export function openMovesiaDB() {
   if (globalDb) return globalDb;
   
@@ -51,6 +59,13 @@ export function openMovesiaDB() {
       path TEXT NOT NULL,
       updated_ts INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS index_state (
+      project_id   TEXT PRIMARY KEY,
+      snapshot_sha TEXT NOT NULL,
+      total_items  INTEGER NOT NULL,
+      qdrant_count INTEGER,
+      completed_at INTEGER NOT NULL
+    );
     CREATE INDEX IF NOT EXISTS idx_events_ts   ON events(ts DESC);
     CREATE INDEX IF NOT EXISTS idx_assets_path ON assets(path);
   `);
@@ -65,6 +80,29 @@ export function closeMovesiaDB() {
     globalDb.close();
     globalDb = null;
   }
+}
+
+// --- Index State Helpers ---
+export function writeIndexState(db: Database.Database, s: {
+  project_id: string; 
+  snapshot_sha: string; 
+  total_items: number;
+  qdrant_count: number | null; 
+  completed_at: number;
+}) {
+  db.prepare(`
+    INSERT INTO index_state(project_id, snapshot_sha, total_items, qdrant_count, completed_at)
+    VALUES (@project_id, @snapshot_sha, @total_items, @qdrant_count, @completed_at)
+    ON CONFLICT(project_id) DO UPDATE SET
+      snapshot_sha=excluded.snapshot_sha,
+      total_items=excluded.total_items,
+      qdrant_count=excluded.qdrant_count,
+      completed_at=excluded.completed_at
+  `).run(s);
+}
+
+export function readIndexState(db: Database.Database, projectId: string): IndexState | null {
+  return db.prepare(`SELECT * FROM index_state WHERE project_id = ?`).get(projectId) as IndexState || null;
 }
 
 export function logEvent(db: Database.Database, evt: DomainEvent) {

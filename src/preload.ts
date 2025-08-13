@@ -68,6 +68,27 @@ export const globals = {
   }
 };
 
+// Indexing status API
+type IndexingStatus = {
+  phase: 'idle' | 'scanning' | 'embedding' | 'writing' | 'qdrant' | 'complete' | 'error';
+  total: number;
+  done: number;
+  lastFile?: string;
+  qdrantPoints?: number;
+  message?: string;
+  error?: string;
+};
+
+const indexingAPI = {
+  getStatus: () => ipcRenderer.invoke('indexing:getStatus') as Promise<IndexingStatus>,
+  onStatus: (callback: (status: IndexingStatus) => void) => {
+    const listener = (_: unknown, status: IndexingStatus) => callback(status);
+    ipcRenderer.on('indexing:status', listener);
+    return () => ipcRenderer.removeListener('indexing:status', listener);
+  }
+};
+
 // Create a safe, bidirectional, synchronous bridge across isolated contexts
 // When contextIsolation is enabled in your webPreferences, your preload scripts run in an "Isolated World".
 contextBridge.exposeInMainWorld('electron', globals);
+contextBridge.exposeInMainWorld('indexingAPI', indexingAPI);

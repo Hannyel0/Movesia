@@ -2,9 +2,11 @@
 import type Database from "better-sqlite3";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { createHash } from 'node:crypto';
 import { upsertPoints, deletePointsByPath, deletePointsByGuid } from "./qdrant";
-import { logEvent, upsertAssets, markDeleted, upsertScene } from "./sqlite";
+import { logEvent, upsertAssets, markDeleted, upsertScene, writeIndexState } from "./sqlite";
 import { makePointIdFromChunkKey } from "./ids";
+import { emitStatus, getQdrantPointCount } from "./progress";
 
 export type Embedder = { dim: number; embed(texts: string[]): Promise<number[][]> };
 
@@ -15,9 +17,45 @@ export type UnityEvent = {
     body: Record<string, unknown>;
 };
 
+type UnityAssetItem = {
+    guid: string;
+    path: string;
+    kind: string;
+    hash?: string;
+    sha256?: string;
+    from?: string;
+    deps?: string[];
+};
+
+type UnitySceneData = {
+    guid: string;
+    path: string;
+    deps?: string[];
+};
+
 function normalizeRel(p: string) {
     // Store a normalized relative path (forward slashes)
     return p.replaceAll("\\", "/");
+}
+
+// Helper to compute canonical project ID from root path
+export function computeProjectId(root: string): string {
+  const normalized = path.normalize(root).replace(/\\/g,"/").replace(/\/+$/,"");
+  return createHash("sha256").update(normalized).digest("hex").slice(0,16);
+}
+
+// --- Helper: snapshot of current assets ---
+export function computeSnapshotFromAssets(db: Database.Database): { sha: string; total: number } {
+  const rows = db.prepare(`
+    SELECT guid, COALESCE(hash, printf('%d:%d', COALESCE(mtime,0), COALESCE(size,0))) AS ver
+    FROM assets
+    WHERE deleted = 0
+    ORDER BY guid
+  `).all() as Array<{ guid: string; ver: string }>;
+
+  const h = createHash('sha256');
+  for (const r of rows) h.update(r.guid + ':' + r.ver + '\n');
+  return { sha: h.digest('hex'), total: rows.length };
 }
 
 export class Indexer {
@@ -27,6 +65,13 @@ export class Indexer {
     private pendingEvents: Array<{ evt: UnityEvent; resolve: () => void; reject: (err: Error) => void }> = [];
 
     constructor(private db: Database.Database, private embedder: Embedder) { }
+
+    private getProjectId(): string {
+        if (!this.projectRoot) {
+            throw new Error('Project root not set. Call setProjectRoot() first.');
+        }
+        return computeProjectId(this.projectRoot);
+    }
 
     setProjectRoot(root: string) {
         this.projectRoot = root;
@@ -129,24 +174,80 @@ export class Indexer {
 
         switch (evt.type) {
             case "assets_imported": {
-                const importedItems = (evt.body.items as Array<{ guid: string; path: string; kind?: string; mtime?: number; size?: number; hash?: string; deps?: string[] }>) ?? [];
-                upsertAssets(this.db, importedItems, evt.ts);
-                // Filter items that have a kind property before indexing
-                const itemsWithKind = importedItems.filter((item): item is { guid: string; path: string; kind: string; mtime?: number; size?: number; hash?: string; deps?: string[] } =>
-                    item.kind !== undefined
-                );
-                await this.indexTextualItems(itemsWithKind, evt, evt.ts);
+                const items = (evt.body.items as UnityAssetItem[]) ?? [];
+                
+                // Normalize hash field (map sha256 → hash)
+                const normalized = items.map(it => ({
+                    ...it,
+                    hash: it.hash ?? it.sha256 ?? null
+                }));
+                upsertAssets(this.db, normalized, evt.ts);
+
+                // Also mirror .unity files into the 'scenes' table
+                for (const it of items) {
+                    if (typeof it.path === "string" && it.path.endsWith(".unity") && it.guid) {
+                        upsertScene(this.db, { guid: it.guid, path: it.path, ts: evt.ts });
+                    }
+                }
+
+                // --- NEW: progress for textual items in this batch ---
+                const textual = normalized.filter(it => it.kind === "MonoScript" || it.kind === "TextAsset");
+                const total = textual.length;
+
+                if (total === 0) {
+                    emitStatus({ phase: "complete", total: 0, done: 0, message: "No textual assets in batch" });
+                    break;
+                }
+
+                emitStatus({ phase: "scanning", total, done: 0, message: "Indexing changed files" });
+
+                let done = 0;
+                for (const it of textual) {
+                    emitStatus({ phase: "embedding", total, done, lastFile: it.path });
+                    await this.indexScript(it.path, evt, evt.ts);
+                    done++;
+                    emitStatus({ phase: "qdrant", total, done, lastFile: it.path });
+                }
+
+                // Optional: confirm DB size (cheap, visible signal)
+                const qdrantPoints = await getQdrantPointCount(process.env.QDRANT_COLLECTION ?? "movesia");
+                emitStatus({ phase: "complete", total, done, qdrantPoints, message: "Up to date" });
+
+                // Persist snapshot for cold start verification
+                const { sha, total: totalItems } = computeSnapshotFromAssets(this.db);
+                const qdrantCount = await getQdrantPointCount(process.env.QDRANT_COLLECTION ?? 'movesia')
+                    .catch((): null => null);
+                writeIndexState(this.db, {
+                    project_id: this.getProjectId(),
+                    snapshot_sha: sha,
+                    total_items: totalItems,
+                    qdrant_count: qdrantCount,
+                    completed_at: Math.floor(Date.now() / 1000),
+                });
                 break;
             }
 
             case "assets_moved": {
-                const movedItems = (evt.body.items as Array<{ guid: string; path: string; from?: string; kind?: string; mtime?: number; size?: number; hash?: string; deps?: string[] }>) ?? [];
-
+                const items = (evt.body.items as UnityAssetItem[]) ?? [];
+                
+                // Normalize hash field (map sha256 → hash)
+                const normalized = items.map(it => ({
+                    ...it,
+                    hash: it.hash ?? it.sha256 ?? null
+                }));
+                
                 // 1) Update SQLite with new paths
-                upsertAssets(this.db, movedItems, evt.ts);
+                upsertAssets(this.db, normalized, evt.ts);
+
+                // Keep scenes table in sync on move
+                for (const it of items) {
+                    if (typeof it.path === "string" && it.path.endsWith(".unity") && it.guid) {
+                        upsertScene(this.db, { guid: it.guid, path: it.path, ts: evt.ts });
+                    }
+                }
 
                 // 2) Handle Qdrant cleanup and re-indexing
-                for (const item of movedItems) {
+                for (const item of normalized) {
                     try {
                         // Delete old embeddings if we have the old path
                         if (item.from) {
@@ -154,16 +255,50 @@ export class Indexer {
                             await deletePointsByPath(normalizedOldPath);
                             console.log(`🔄 Deleted old embeddings for moved file: ${normalizedOldPath}`);
                         }
-
-                        // Re-index at new location (if it's a textual asset)
-                        if (item.kind && (item.kind === "MonoScript" || item.kind === "TextAsset")) {
-                            await this.indexTextualItems([item as { guid: string; path: string; kind: string }], evt, evt.ts);
-                            console.log(`🔄 Re-indexed moved file at new location: ${item.path}`);
-                        }
                     } catch (error) {
                         console.error(`❌ Failed to handle move for ${item.path}:`, error);
                     }
                 }
+
+                // --- NEW: progress for textual items in this batch ---
+                const textual = normalized.filter(it => it.kind === "MonoScript" || it.kind === "TextAsset");
+                const total = textual.length;
+
+                if (total === 0) {
+                    emitStatus({ phase: "complete", total: 0, done: 0, message: "No textual assets moved" });
+                    break;
+                }
+
+                emitStatus({ phase: "scanning", total, done: 0, message: "Re-indexing moved files" });
+
+                let done = 0;
+                for (const item of textual) {
+                    try {
+                        emitStatus({ phase: "embedding", total, done, lastFile: item.path });
+                        await this.indexScript(item.path, evt, evt.ts);
+                        done++;
+                        emitStatus({ phase: "qdrant", total, done, lastFile: item.path });
+                        console.log(`🔄 Re-indexed moved file at new location: ${item.path}`);
+                    } catch (error) {
+                        console.error(`❌ Failed to re-index moved file ${item.path}:`, error);
+                    }
+                }
+
+                // Optional: confirm DB size
+                const qdrantPoints = await getQdrantPointCount(process.env.QDRANT_COLLECTION ?? "movesia");
+                emitStatus({ phase: "complete", total, done, qdrantPoints, message: "Moved files re-indexed" });
+
+                // Persist snapshot for cold start verification
+                const { sha, total: totalItems } = computeSnapshotFromAssets(this.db);
+                const qdrantCount = await getQdrantPointCount(process.env.QDRANT_COLLECTION ?? 'movesia')
+                    .catch((): null => null);
+                writeIndexState(this.db, {
+                    project_id: this.getProjectId(),
+                    snapshot_sha: sha,
+                    total_items: totalItems,
+                    qdrant_count: qdrantCount,
+                    completed_at: Math.floor(Date.now() / 1000),
+                });
                 break;
             }
 
@@ -192,14 +327,50 @@ export class Indexer {
                         console.error(`❌ Failed to delete embeddings for ${item.path || item.guid}:`, error);
                     }
                 }
+
+                // 3) Write snapshot and emit completion status after cleanup
+                const { sha, total: totalItems } = computeSnapshotFromAssets(this.db);
+                const qdrantCount = await getQdrantPointCount(process.env.QDRANT_COLLECTION ?? 'movesia').catch((): null => null);
+                writeIndexState(this.db, {
+                    project_id: this.getProjectId(),
+                    snapshot_sha: sha,
+                    total_items: totalItems,
+                    qdrant_count: qdrantCount,
+                    completed_at: Math.floor(Date.now()/1000),
+                });
+
+                // let the UI know we're stable again:
+                emitStatus({ phase: "complete", total: 0, done: 0, message: "Deletions applied" });
                 break;
             }
 
             case "scene_saved": {
-                const sceneGuid = evt.body.guid as string;
-                const scenePath = evt.body.path as string;
-                upsertScene(this.db, { guid: sceneGuid, path: scenePath, ts: evt.ts });
-                await this.indexScene(scenePath, evt, evt.ts);
+                const { guid, path, deps = [] } = evt.body as UnitySceneData;
+                
+                // keep your DB writes
+                upsertAssets(this.db, [{ guid, path, kind: "Scene", deps }], evt.ts);
+                upsertScene(this.db, { guid, path, ts: evt.ts });
+
+                // NEW: scene progress
+                emitStatus({ phase: "scanning", total: 1, done: 0, lastFile: path, message: "Scene changed" });
+                emitStatus({ phase: "embedding", total: 1, done: 0, lastFile: path });
+                await this.indexScene(path, evt, evt.ts);
+                emitStatus({ phase: "qdrant", total: 1, done: 1, lastFile: path });
+
+                const qdrantPoints = await getQdrantPointCount(process.env.QDRANT_COLLECTION ?? "movesia");
+                emitStatus({ phase: "complete", total: 1, done: 1, qdrantPoints, lastFile: path, message: "Scene indexed" });
+
+                // Persist snapshot for cold start verification
+                const { sha, total: totalItems } = computeSnapshotFromAssets(this.db);
+                const qdrantCount = await getQdrantPointCount(process.env.QDRANT_COLLECTION ?? 'movesia')
+                    .catch((): null => null);
+                writeIndexState(this.db, {
+                    project_id: this.getProjectId(),
+                    snapshot_sha: sha,
+                    total_items: totalItems,
+                    qdrant_count: qdrantCount,
+                    completed_at: Math.floor(Date.now() / 1000),
+                });
                 break;
             }
 

@@ -20,7 +20,7 @@ async function readEditorVersion(projectDir: string) {
   } catch { return undefined; }
 }
 
-export async function isUnityProject(projectDir: string): Promise<UnityProject | null> {
+export async function isUnityProject(projectDir: string): Promise<(UnityProject & { productGUID?: string }) | null> {
   const hasAssets = await isDir(path.join(projectDir, "Assets"));
   const hasProjectSettings = await isDir(path.join(projectDir, "ProjectSettings"));
 
@@ -36,8 +36,9 @@ export async function isUnityProject(projectDir: string): Promise<UnityProject |
   }
 
   const editorVersion = await readEditorVersion(projectDir);
+  const productGUID = await readProductGUID(projectDir);
   const name = path.basename(projectDir);
-  return { path: projectDir, name, editorVersion };
+  return { path: projectDir, name, editorVersion, productGUID };
 }
 
 function hubProjectsJsonCandidates(): string[] {

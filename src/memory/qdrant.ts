@@ -17,7 +17,7 @@ export async function waitQdrantReady(timeoutMs = 15000) {
       const r = await fetch(`${BASE}/readyz`);
       if (r.ok) return;
     } catch {}
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
   throw new Error("Qdrant not ready");
 }
@@ -125,7 +125,7 @@ async function scrollIdsByPath(path: string): Promise<(string|number)[]> {
     });
     if (!res.ok) throw new Error(`Qdrant scroll failed: ${res.status} — ${await res.text()}`);
     const j = await res.json();
-    ids.push(...(j.result?.points?.map((p: any) => p.id) ?? []));
+    ids.push(...(j.result?.points?.map((p: { id: string }) => p.id) ?? []));
     offset = j.result?.next_page_offset ?? null;
     if (!offset) break;
   }
