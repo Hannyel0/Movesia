@@ -99,30 +99,39 @@ function IndexingStatusIcon({ status, isLoading }: { status: IndexingStatus | nu
   if (!status) {
     return (
       <div className="relative">
-        <Database className="h-5 w-5 text-red-500" />
-        <div className="absolute -top-1 -right-1 h-2 w-2 bg-red-500 rounded-full" />
+        <Database className="h-5 w-5 text-muted-foreground" />
+        <div className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full" />
       </div>
     );
   }
 
-  const isActive = status.phase !== 'idle' && status.phase !== 'complete' && status.phase !== 'error';
+  // Determine dot color based on status
+  const getDotColor = (phase: IndexingPhase) => {
+    switch (phase) {
+      case 'complete':
+        return 'bg-green-500'; // Green for fully indexed/complete
+      case 'idle':
+        return 'bg-blue-500'; // Blue for idle
+      case 'scanning':
+      case 'embedding':
+      case 'writing':
+      case 'qdrant':
+        return 'bg-yellow-500'; // Yellow for active processing states
+      case 'error':
+        return 'bg-red-500'; // Red for error
+      default:
+        return 'bg-gray-500';
+    }
+  };
+
+  const isActive = ['scanning', 'embedding', 'writing', 'qdrant'].includes(status.phase);
   
   return (
     <div className="relative">
-      <Database className={`h-5 w-5 ${
-        status.phase === 'error' ? 'text-red-500' :
-        status.phase === 'complete' ? 'text-green-500' :
-        isActive ? 'text-blue-500' : 'text-muted-foreground'
+      <Database className="h-5 w-5 text-muted-foreground" />
+      <div className={`absolute -top-1 -right-1 h-2 w-2 ${getDotColor(status.phase)} rounded-full ${
+        isActive ? 'animate-pulse' : ''
       }`} />
-      {isActive && (
-        <div className="absolute -top-1 -right-1 h-2 w-2 bg-blue-500 rounded-full animate-pulse" />
-      )}
-      {status.phase === 'error' && (
-        <div className="absolute -top-1 -right-1 h-2 w-2 bg-red-500 rounded-full" />
-      )}
-      {status.phase === 'complete' && (
-        <div className="absolute -top-1 -right-1 h-2 w-2 bg-green-500 rounded-full" />
-      )}
     </div>
   );
 }
