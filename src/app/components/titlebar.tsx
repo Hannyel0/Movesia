@@ -6,6 +6,7 @@ import { useState } from 'react';
 
 import Menu from './menu';
 import WindowControls from './window-controls';
+import { IndexingStatusComponent } from './indexing-status';
 
 const handleDoubleClick = () => {
   electron.ipcRenderer.invoke(MenuChannels.WINDOW_TOGGLE_MAXIMIZE);
@@ -28,6 +29,11 @@ export default function Titlebar () {
           <Menu />
           <WindowControls windowState={windowState} />
         </>
+      )}
+      {__DARWIN__ && (
+        <div className="flex-1 flex justify-end items-center pr-4" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <IndexingStatusComponent />
+        </div>
       )}
     </div>
   );
