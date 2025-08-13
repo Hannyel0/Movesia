@@ -1,3 +1,4 @@
+import * as React from 'react';
 import ControlButton from '@/app/components/control-button';
 import { MenuChannels } from '@/channels/menuChannels';
 import type { WindowState } from '@/windowState';
@@ -13,11 +14,20 @@ const restorePath =
 const maximizePath = 'M 0,0 0,10 10,10 10,0 Z M 1,1 9,1 9,9 1,9 Z';
 const minimizePath = 'M 0,5 10,5 10,6 0,6 Z';
 
-interface IWindowControlsProps {
-  readonly windowState: WindowState;
-}
+type DragRegionStyle = React.CSSProperties & {
+  appRegion?: 'drag' | 'no-drag';
+  WebkitAppRegion?: 'drag' | 'no-drag';
+};
 
-export default function WindowControls ({ windowState }: IWindowControlsProps) {
+type IWindowControlsProps = React.HTMLAttributes<HTMLDivElement> & {
+  readonly windowState: WindowState;
+};
+
+export default function WindowControls ({ 
+  windowState, 
+  className, 
+  ...rest 
+}: IWindowControlsProps) {
   const executeWindowCommand = useCallback(
     (command: string) => {
       electron.ipcRenderer.invoke(command, windowState);
@@ -25,8 +35,14 @@ export default function WindowControls ({ windowState }: IWindowControlsProps) {
     [windowState]
   );
 
+  const style: DragRegionStyle = { ...(rest.style || {}), WebkitAppRegion: 'no-drag' };
+
   return (
-    <section className={classNames('window-titlebar-controls', 'type-win32')}>
+    <div
+      {...rest}
+      className={classNames('window-titlebar-controls', 'type-win32', className)}
+      style={style}
+    >
       <ControlButton
         name='minimize'
         onClick={() => executeWindowCommand(MenuChannels.WINDOW_MINIMIZE)}
@@ -42,6 +58,6 @@ export default function WindowControls ({ windowState }: IWindowControlsProps) {
         onClick={() => executeWindowCommand(MenuChannels.WINDOW_CLOSE)}
         path={closePath}
       />
-    </section>
+    </div>
   );
 }

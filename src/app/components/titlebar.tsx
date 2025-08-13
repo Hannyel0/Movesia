@@ -2,7 +2,7 @@ import { useRendererListener } from '@/app/hooks';
 import { MenuChannels } from '@/channels/menuChannels';
 import type { WindowState } from '@/windowState';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import Menu from './menu';
 import WindowControls from './window-controls';
@@ -14,8 +14,23 @@ const handleDoubleClick = () => {
 
 export default function Titlebar () {
   const [windowState, setWindowState] = useState<WindowState>('normal');
+  const [wcw, setWcw] = useState(120); // fallback width for window controls
 
   useRendererListener('window-state-changed', (_, windowState: WindowState) => setWindowState(windowState));
+
+  // Track window controls width to reserve space for absolutely positioned controls
+  useEffect(() => {
+    const el = document.getElementById('window-controls');
+    const bar = document.querySelector('.window-titlebar') as HTMLElement | null;
+    const sync = () => {
+      const w = el?.offsetWidth ?? 120;
+      setWcw(w);
+      bar?.style.setProperty('--wcw', `${w}px`);
+    };
+    sync();
+    window.addEventListener('resize', sync);
+    return () => window.removeEventListener('resize', sync);
+  }, []);
 
   // Hide titlebar in full screen mode on macOS
   if (windowState === 'full-screen' && __DARWIN__) {
@@ -27,7 +42,14 @@ export default function Titlebar () {
       {__WIN32__ && (
         <>
           <Menu />
-          <WindowControls windowState={windowState} />
+          <div className="flex-1" />
+          <div
+            className="flex items-center gap-2"
+            style={{ WebkitAppRegion: 'no-drag', paddingRight: `calc(var(--wcw, ${wcw}px) + 8px)` } as React.CSSProperties}
+          >
+            <IndexingStatusComponent />
+          </div>
+          <WindowControls id="window-controls" windowState={windowState} />
         </>
       )}
       {__DARWIN__ && (
