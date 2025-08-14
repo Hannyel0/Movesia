@@ -6,8 +6,7 @@ import {
   Settings,
   History,
   Search,
-  ChevronLeft,
-  ChevronRight,
+  PanelRightClose,
   Trash2,
   Edit3,
   MoreHorizontal,
@@ -89,7 +88,7 @@ export default function Sidebar({
         width: isCollapsed ? 48 : 280,
       }}
       transition={{ duration: 0.3, ease: "easeInOut" }}
-      className="relative bg-[#2A2A2A] flex flex-col overflow-hidden shadow-2xl"
+      className="relative bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col overflow-hidden shadow-none"
       style={{ 
         height: '100%',
         maxHeight: '100%',
@@ -98,7 +97,7 @@ export default function Sidebar({
     >
       {/* Header */}
       <div className="px-3 py-4">
-        <div className="flex items-center justify-between">
+        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
           <AnimatePresence mode="wait">
             {!isCollapsed && (
               <motion.div
@@ -118,17 +117,11 @@ export default function Sidebar({
             variant="ghost"
             size="sm"
             onClick={onToggle}
-            className="h-8 w-8 p-0 cursor-pointer"
+            className="h-8 w-8 p-0 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           >
-            {isCollapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
-            )}
+            <PanelRightClose className="h-4 w-4" />
           </Button>
         </div>
-
-
       </div>
 
       {/* Search with New Chat */}
@@ -148,17 +141,17 @@ export default function Sidebar({
                   placeholder="Search conversations..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 bg-white/5 border-white/10 text-white placeholder:text-white/50 text-xs h-8"
+                  className="pl-8 bg-background/40 border-sidebar-border text-sidebar-foreground placeholder:text-sidebar-foreground/60 text-xs h-8"
                 />
               </div>
               <Button
                 onClick={onNewSession}
                 variant="ghost"
                 size="sm"
-                className="h-8 w-8 p-0 hover:bg-white/10 cursor-pointer flex-shrink-0"
+                className="h-8 w-8 p-0 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex-shrink-0"
                 title="New Chat"
               >
-                <Plus className="h-3 w-3 text-white/70" />
+                <Plus className="h-3 w-3" />
               </Button>
             </div>
           </motion.div>
@@ -187,9 +180,9 @@ export default function Sidebar({
                     className="group"
                   >
                     <div
-                      className={`cursor-pointer transition-all duration-200 rounded-md px-3 py-2 hover:bg-white/10 relative ${
+                      className={`cursor-pointer transition-all duration-200 rounded-md px-3 py-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground relative ${
                         currentSessionId === session.id
-                          ? "bg-white/15"
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
                           : "bg-transparent"
                       }`}
                       onClick={() => onSessionSelect(session.id)}
@@ -209,7 +202,7 @@ export default function Sidebar({
                               autoFocus
                             />
                           ) : (
-                            <h3 className="font-medium text-xs truncate leading-tight text-white/90">
+                            <h3 className="font-medium text-xs truncate leading-tight">
                               {session.title}
                             </h3>
                           )}
@@ -220,7 +213,7 @@ export default function Sidebar({
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10 flex-shrink-0"
+                              className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex-shrink-0"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <MoreHorizontal className="h-2.5 w-2.5" />

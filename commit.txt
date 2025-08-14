@@ -1,0 +1,11 @@
+refactor(ipc): improve connection and indexing status management
+
+- fix: create single source of truth for connection status
+- feat: add event-driven connection updates via contextBridge
+- refactor: unify IndexingStatus types in shared directory
+- fix: correct idle status display in footer component
+- perf: replace polling with event subscriptions
+- feat: clear project references on disconnect
+- fix: add destroyed window guards to prevent exceptions
+- style: use non-spinning icon for idle state
+
