@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Progress } from './ui/progress';
-import { Badge } from './ui/badge';
-import { Skeleton } from './ui/skeleton';
 import { Button } from './ui/button';
 import {
   Popover,
@@ -9,27 +7,13 @@ import {
   PopoverTrigger,
 } from './ui/popover';
 import { 
-  FileText, 
   Database, 
-  Search, 
   CheckCircle2, 
   XCircle, 
   Loader2,
-  Activity,
-  HardDrive
+  AlertTriangle
 } from 'lucide-react';
-
-type IndexingPhase = 'idle' | 'scanning' | 'embedding' | 'writing' | 'qdrant' | 'complete' | 'error';
-
-type IndexingStatus = {
-  phase: IndexingPhase;
-  total: number;
-  done: number;
-  lastFile?: string;
-  qdrantPoints?: number;
-  message?: string;
-  error?: string;
-};
+import type { IndexingStatus, IndexingPhase } from '../../shared/indexing-types';
 
 // Extend window type for TypeScript
 declare global {
@@ -38,60 +22,20 @@ declare global {
       getStatus: () => Promise<IndexingStatus>;
       onStatus: (callback: (status: IndexingStatus) => void) => () => void;
     };
+    connectionAPI: {
+      get: () => Promise<boolean>;
+      onStatus: (callback: (connected: boolean) => void) => () => void;
+    };
   }
 }
-
-const phaseConfig = {
-  idle: { 
-    label: 'Idle', 
-    icon: Activity, 
-    color: 'bg-gray-500',
-    description: 'Waiting for indexing tasks'
-  },
-  scanning: { 
-    label: 'Scanning', 
-    icon: Search, 
-    color: 'bg-blue-500',
-    description: 'Discovering files to index'
-  },
-  embedding: { 
-    label: 'Embedding', 
-    icon: FileText, 
-    color: 'bg-yellow-500',
-    description: 'Processing and embedding content'
-  },
-  writing: { 
-    label: 'Writing', 
-    icon: HardDrive, 
-    color: 'bg-purple-500',
-    description: 'Saving to database'
-  },
-  qdrant: { 
-    label: 'Vector DB', 
-    icon: Database, 
-    color: 'bg-indigo-500',
-    description: 'Updating vector database'
-  },
-  complete: { 
-    label: 'Complete', 
-    icon: CheckCircle2, 
-    color: 'bg-green-500',
-    description: 'Indexing completed successfully'
-  },
-  error: { 
-    label: 'Error', 
-    icon: XCircle, 
-    color: 'bg-red-500',
-    description: 'Indexing encountered an error'
-  }
-};
 
 // Icon component that shows current status
 function IndexingStatusIcon({ status, isLoading }: { status: IndexingStatus | null; isLoading: boolean }) {
   if (isLoading) {
     return (
       <div className="relative">
-        <Database className="h-5 w-5 text-muted-foreground animate-pulse" />
+        <Database className="h-4 w-4 opacity-60" style={{ filter: 'brightness(0) saturate(100%) invert(60%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(90%) contrast(90%)' }} />
+        <div className="absolute -top-1 -right-1 h-2 w-2 bg-yellow-500 rounded-full animate-pulse" />
       </div>
     );
   }
@@ -99,8 +43,8 @@ function IndexingStatusIcon({ status, isLoading }: { status: IndexingStatus | nu
   if (!status) {
     return (
       <div className="relative">
-        <Database className="h-5 w-5 text-muted-foreground" />
-        <div className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full" />
+        <Database className="h-4 w-4 opacity-60" style={{ filter: 'brightness(0) saturate(100%) invert(60%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(90%) contrast(90%)' }} />
+        <div className="absolute -top-1 -right-1 h-2 w-2 bg-red-500 rounded-full" />
       </div>
     );
   }
@@ -109,16 +53,16 @@ function IndexingStatusIcon({ status, isLoading }: { status: IndexingStatus | nu
   const getDotColor = (phase: IndexingPhase) => {
     switch (phase) {
       case 'complete':
-        return 'bg-green-500'; // Green for fully indexed/complete
+        return 'bg-green-500';
       case 'idle':
-        return 'bg-blue-500'; // Blue for idle
+        return 'bg-blue-500';
       case 'scanning':
       case 'embedding':
       case 'writing':
       case 'qdrant':
-        return 'bg-yellow-500'; // Yellow for active processing states
+        return 'bg-yellow-500';
       case 'error':
-        return 'bg-red-500'; // Red for error
+        return 'bg-red-500';
       default:
         return 'bg-gray-500';
     }
@@ -136,134 +80,172 @@ function IndexingStatusIcon({ status, isLoading }: { status: IndexingStatus | nu
   );
 }
 
-// Status details content for the dialog
+// Minimalistic status details content matching the user's design
 function IndexingStatusDetails({ status, isLoading }: { status: IndexingStatus | null; isLoading: boolean }) {
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-2 w-full" />
-        <div className="flex gap-2">
-          <Skeleton className="h-6 w-16" />
-          <Skeleton className="h-6 w-20" />
-        </div>
+      <div className="flex items-center justify-center py-6">
+        <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+        <span className="ml-2 text-sm text-white">Loading...</span>
       </div>
     );
   }
 
   if (!status) {
     return (
-      <div className="text-center py-8">
-        <XCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-red-600 mb-2">Service Unavailable</h3>
-        <p className="text-sm text-muted-foreground">
-          Unable to connect to indexing service
-        </p>
+      <div className="text-center py-6">
+        <XCircle className="h-5 w-5 text-red-500 mx-auto mb-2" />
+        <p className="text-sm text-gray-400">Service unavailable</p>
       </div>
     );
   }
 
-  const config = phaseConfig[status.phase];
-  const Icon = config.icon;
   const progress = status.total > 0 ? (status.done / status.total) * 100 : 0;
-  const isActive = status.phase !== 'idle' && status.phase !== 'complete' && status.phase !== 'error';
+
+  // Handle different states based on your design
+  if (status.phase === 'idle') {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="flex items-center gap-2">
+          <Database className="h-5 w-5 text-blue-500" />
+          <span className="text-blue-500 font-medium">Idle</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (status.phase === 'complete' && status.total > 0) {
+    return (
+      <div className="space-y-3 p-5">
+        {/* Status title */}
+        <div className="text-green-500 font-medium text-sm">Fully indexed</div>
+        
+        {/* Progress bar */}
+        <div className="space-y-1">
+          <Progress value={100} className="h-2" />
+          <div className="text-right text-xs text-gray-400">
+            100% indexed
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (status.phase === 'error') {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="flex items-center gap-2">
+          <XCircle className="h-5 w-5 text-red-500" />
+          <span className="text-red-500 font-medium">Indexing Error</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Active indexing states
+  return (
+    <div className="space-y-3">
+      {/* Status title */}
+      <div className="text-yellow-500 font-medium text-sm flex items-center gap-2">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Indexing...
+      </div>
+      
+      {/* Progress bar */}
+      <div className="space-y-1">
+        <Progress value={progress} className="h-2" />
+        <div className="text-right text-xs text-gray-400">
+          {Math.round(progress)}% indexed
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Footer component with status messages
+function IndexingStatusFooter({ status, isLoading }: { status: IndexingStatus | null; isLoading: boolean }) {
+  const [unityConnected, setUnityConnected] = useState(false);
+
+  useEffect(() => {
+    let connectionCleanup: (() => void) | undefined;
+
+    const initializeConnectionStatus = async () => {
+      try {
+        if (window.connectionAPI) {
+          // Get initial connection status
+          const connected = await window.connectionAPI.get();
+          setUnityConnected(connected);
+
+          // Subscribe to connection status changes
+          connectionCleanup = window.connectionAPI.onStatus((connected) => {
+            setUnityConnected(connected);
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to initialize connection status in footer:', error);
+        setUnityConnected(false);
+      }
+    };
+
+    initializeConnectionStatus();
+
+    return () => {
+      if (connectionCleanup) connectionCleanup();
+    };
+  }, []);
+
+  if (isLoading) {
+    return null;
+  }
+
+  // Show different footer messages based on status
+  const getFooterMessage = () => {
+    if (!unityConnected) {
+      return {
+        icon: AlertTriangle,
+        text: "Not connected to unity",
+        iconColor: "text-orange-500",
+        textColor: "text-gray-400"
+      };
+    }
+
+    if (status?.phase === 'complete' && status.total > 0) {
+      return {
+        icon: CheckCircle2,
+        text: "Project fully indexed (verified)",
+        iconColor: "text-green-500",
+        textColor: "text-gray-400"
+      };
+    }
+
+    if (status?.phase === 'idle') {
+      return {
+        icon: Database,
+        text: "Idle",
+        iconColor: "text-blue-500",
+        textColor: "text-gray-400"
+      };
+    }
+
+    return null;
+  };
+
+  const footerInfo = getFooterMessage();
+
+  if (!footerInfo) {
+    return null;
+  }
+
+  const FooterIcon = footerInfo.icon;
 
   return (
-    <div className="space-y-6">
-      {/* Status Header */}
-      <div className="flex items-center gap-3">
-        <div className="relative">
-          <div className={`p-2 rounded-full ${config.color}`}>
-            <Icon className="h-5 w-5 text-white" />
-          </div>
-          {isActive && (
-            <div className="absolute inset-0 rounded-full bg-current opacity-20 animate-pulse" />
-          )}
-        </div>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold">{config.label}</h3>
-            {isActive && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {config.description}
-            {status.message && ` • ${status.message}`}
-          </p>
-        </div>
+    <div className="pt-1 border-t border-gray-700">
+      <div className="flex items-center gap-2">
+        <FooterIcon className={`h-3 w-3 ${footerInfo.iconColor}`} />
+        <span className={`text-xs ${footerInfo.textColor}`}>
+          {footerInfo.text}
+        </span>
       </div>
-
-      {/* Progress Section */}
-      {status.total > 0 && (
-        <div className="space-y-3">
-          <div className="flex justify-between text-sm">
-            <span className="font-medium">Progress</span>
-            <span className="text-muted-foreground">
-              {status.done} / {status.total} files
-            </span>
-          </div>
-          <Progress value={progress} className="h-3" />
-          <div className="text-xs text-muted-foreground text-right">
-            {Math.round(progress)}% complete
-          </div>
-        </div>
-      )}
-
-      {/* Current File */}
-      {status.lastFile && (
-        <div className="space-y-2">
-          <div className="text-sm font-medium">Current File</div>
-          <div className="text-sm font-mono bg-muted px-3 py-2 rounded-md truncate border" title={status.lastFile}>
-            {status.lastFile}
-          </div>
-        </div>
-      )}
-
-      {/* Status Badges */}
-      <div className="flex flex-wrap gap-2">
-        <Badge 
-          variant={status.phase === 'error' ? 'destructive' : status.phase === 'complete' ? 'default' : 'secondary'}
-          className="flex items-center gap-1"
-        >
-          <Icon className="h-3 w-3" />
-          {config.label}
-        </Badge>
-        
-        {typeof status.qdrantPoints === 'number' && (
-          <Badge variant="outline" className="flex items-center gap-1">
-            <Database className="h-3 w-3" />
-            {status.qdrantPoints.toLocaleString()} points
-          </Badge>
-        )}
-      </div>
-
-      {/* Error Message */}
-      {status.error && (
-        <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <XCircle className="h-4 w-4 text-destructive" />
-            <div className="text-sm font-medium text-destructive">Error Details</div>
-          </div>
-          <div className="text-xs text-destructive/80 font-mono bg-destructive/5 p-2 rounded border">
-            {status.error}
-          </div>
-        </div>
-      )}
-
-      {/* Success Message */}
-      {status.phase === 'complete' && status.total > 0 && (
-        <div className="p-4 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-            <div className="text-sm font-medium text-green-800 dark:text-green-200">
-              Indexing Complete
-            </div>
-          </div>
-          <div className="text-xs text-green-600 dark:text-green-400">
-            Successfully indexed {status.total} files
-            {status.qdrantPoints && ` with ${status.qdrantPoints.toLocaleString()} vector embeddings`}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -304,6 +286,39 @@ export function IndexingStatusComponent() {
     };
   }, []);
 
+  // Event-driven connection status guard (replaces polling)
+  useEffect(() => {
+    let connectionCleanup: (() => void) | undefined;
+
+    const initializeConnectionStatus = async () => {
+      try {
+        if (window.connectionAPI) {
+          // Get initial connection status
+          const connected = await window.connectionAPI.get();
+          if (!connected) {
+            setStatus((s) => (s?.phase === 'idle' ? s : { phase: 'idle', total: 0, done: 0 }));
+          }
+
+          // Subscribe to connection status changes
+          connectionCleanup = window.connectionAPI.onStatus((connected) => {
+            if (!connected) {
+              // If disconnected, ensure status reads idle
+              setStatus((s) => (s?.phase === 'idle' ? s : { phase: 'idle', total: 0, done: 0 }));
+            }
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to initialize connection status:', error);
+      }
+    };
+
+    initializeConnectionStatus();
+
+    return () => {
+      if (connectionCleanup) connectionCleanup();
+    };
+  }, []);
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -316,16 +331,14 @@ export function IndexingStatusComponent() {
           <IndexingStatusIcon status={status} isLoading={isLoading} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[480px] p-0" align="end" side="bottom">
-        <div className="p-6">
+      <PopoverContent className="w-[320px] p-0" align="end" side="bottom">
+        <div className="p-2">
           <div className="flex items-center gap-2 mb-4">
-            <Database className="h-5 w-5" />
-            <h3 className="font-semibold">Indexing Status</h3>
+            <Database className="h-4 w-4" />
+            <h3 className="font-medium text-sm">Indexing Status</h3>
           </div>
-          <p className="text-sm text-muted-foreground mb-6">
-            Monitor the progress of your project indexing
-          </p>
           <IndexingStatusDetails status={status} isLoading={isLoading} />
+          <IndexingStatusFooter status={status} isLoading={isLoading} />
         </div>
       </PopoverContent>
     </Popover>

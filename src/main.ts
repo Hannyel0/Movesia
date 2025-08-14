@@ -2,16 +2,18 @@ import { BrowserWindow, app, ipcMain } from 'electron';
 import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 import squirrelStartup from 'electron-squirrel-startup';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
 import type Database from 'better-sqlite3';
 import { createAppWindow } from './appWindow';
 import { WSChannels, UNITY_CURRENT_PROJECT, UNITY_GET_CURRENT_PROJECT } from './channels/wsChannels';
 import { MovesiaWebSocketServer } from './ws/server';
 import type { MovesiaMessage } from './ws/types';
 import { startServicesOnce } from './orchestrator';
-import { registerIpcHandlers, setConnectionStatus } from './ipc/register';
+import { registerIpcHandlers } from './ipc/register';
 import { findUnityProjects, enrichWithProductGUID, isUnityProject } from './main/unity-project-scanner';
 import { configureReconcile } from './main/reconcile';
-import { indexingBus, type IndexingStatus } from './memory/progress';
+import { indexingBus } from './memory/progress';
+import type { IndexingStatus } from './shared/indexing-types';
 import { readIndexState } from './memory/sqlite';
 import { computeSnapshotFromAssets, computeProjectId } from './memory/indexer';
 
@@ -31,6 +33,21 @@ let mainWindow: BrowserWindow | null = null;
 // Keep a ref to the last resolved project for the UI
 let currentUnityProject: { path: string; name: string; editorVersion?: string } | null = null;
 
+// Connection event bus for project connect/disconnect events
+export const bus = new EventEmitter();
+
+// Track Unity connection status and indexing status
+let unityConnected = false;
+let lastIndexingStatus: IndexingStatus = { phase: 'idle', total: 0, done: 0 };
+
+// Push indexing status to renderer and cache it
+function pushIndexingStatus(win: BrowserWindow, status: IndexingStatus) {
+  lastIndexingStatus = status;                            // keep cache in sync
+  if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+    win.webContents.send('indexing:status', status);     // push to renderer
+  }
+}
+
 // Verify and announce index status on project connection
 async function verifyAndAnnounceIndexStatus(db: Database.Database, projectId: string) {
   try {
@@ -45,20 +62,17 @@ async function verifyAndAnnounceIndexStatus(db: Database.Database, projectId: st
         qdrantPoints: prior.qdrant_count ?? undefined,
         message: 'Fully indexed (verified)',
       };
-      lastIndexingStatus = s; // ← cache it
-      for (const win of BrowserWindow.getAllWindows()) win.webContents.send('indexing:status', s);
+      // Use the new pushIndexingStatus function
+      for (const win of BrowserWindow.getAllWindows()) pushIndexingStatus(win, s);
     } else {
       const s: IndexingStatus = { phase: 'scanning', total: 0, done: 0, message: 'Checking for changes…' };
-      lastIndexingStatus = s; // ← cache this too
-      for (const win of BrowserWindow.getAllWindows()) win.webContents.send('indexing:status', s);
+      // Use the new pushIndexingStatus function
+      for (const win of BrowserWindow.getAllWindows()) pushIndexingStatus(win, s);
     }
   } catch (error) {
     console.warn('Failed to verify index status:', error);
   }
 }
-
-// Keep track of indexing status for the UI
-let lastIndexingStatus: IndexingStatus = { phase: 'idle', total: 0, done: 0 };
 
 function norm(p: string) {
   // normalize + force forward slashes + drop trailing slash
@@ -75,13 +89,43 @@ app.whenReady().then(async () => {
   ipcMain.handle(UNITY_GET_CURRENT_PROJECT, async () => currentUnityProject);
 
   // Add indexing status IPC handlers
-  ipcMain.handle('indexing:getStatus', async () => lastIndexingStatus);
+  ipcMain.handle('indexing:getStatus', async () => {
+    // Hydrate: if Unity isn't connected, force idle so UI can't get stuck on "complete"
+    return unityConnected ? lastIndexingStatus : { phase: 'idle' as const, total: 0, done: 0 };
+  });
+
+  // Add connection status IPC handler (single source of truth)
+  ipcMain.handle('get-connection-status', () => unityConnected);
 
   // Bridge indexing events to all renderer windows
   indexingBus.on('status', (status: IndexingStatus) => {
-    lastIndexingStatus = status;
     for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send('indexing:status', status);
+      pushIndexingStatus(win, status);
+    }
+  });
+
+  // Wire connection events
+  bus.on('project-connected', () => {
+    unityConnected = true;
+    console.log('🔗 Unity project connected');
+  });
+
+  bus.on('project-disconnected', () => {
+    unityConnected = false;
+    currentUnityProject = null;
+    console.log('🔌 Unity project disconnected');
+    
+    // Clear current project in all windows
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+        win.webContents.send(UNITY_CURRENT_PROJECT, null);
+      }
+    }
+    
+    // IMPORTANT: flip indexing back to idle when Unity closes
+    const idleStatus: IndexingStatus = { phase: 'idle', total: 0, done: 0, message: 'Unity disconnected' };
+    for (const win of BrowserWindow.getAllWindows()) {
+      pushIndexingStatus(win, idleStatus);
     }
   });
 
@@ -112,9 +156,18 @@ app.whenReady().then(async () => {
   const server = new MovesiaWebSocketServer({
     port: 8765,
     onConnectionChange(connected) {
-      setConnectionStatus(connected);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(WSChannels.CONNECTION_STATUS, connected);
+      // Broadcast connection status to all windows
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+          win.webContents.send(WSChannels.CONNECTION_STATUS, connected);
+        }
+      }
+      
+      // Emit connection events for the orchestrator
+      if (connected) {
+        bus.emit('project-connected');
+      } else {
+        bus.emit('project-disconnected');
       }
     },
     onDomainEvent: async (msg) => {

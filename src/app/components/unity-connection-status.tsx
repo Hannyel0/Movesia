@@ -8,16 +8,7 @@ import {
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'loading';
 
-// Extend window type for TypeScript
-declare global {
-  interface Window {
-    electron: {
-      ipcRenderer: {
-        invoke: (channel: string, ...args: any[]) => Promise<any>;
-      };
-    };
-  }
-}
+// Window type is already declared in unity-project.ts
 
 // Unity connection status icon component
 function UnityConnectionIcon({ status }: { status: ConnectionStatus }) {

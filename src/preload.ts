@@ -82,9 +82,19 @@ type IndexingStatus = {
 const indexingAPI = {
   getStatus: () => ipcRenderer.invoke('indexing:getStatus') as Promise<IndexingStatus>,
   onStatus: (callback: (status: IndexingStatus) => void) => {
-    const listener = (_: unknown, status: IndexingStatus) => callback(status);
-    ipcRenderer.on('indexing:status', listener);
-    return () => ipcRenderer.removeListener('indexing:status', listener);
+    const handler = (_e: unknown, status: IndexingStatus) => callback(status);
+    ipcRenderer.on('indexing:status', handler);
+    return () => ipcRenderer.removeListener('indexing:status', handler);
+  }
+};
+
+// Connection status API
+const connectionAPI = {
+  get: () => ipcRenderer.invoke('get-connection-status') as Promise<boolean>,
+  onStatus: (callback: (connected: boolean) => void) => {
+    const handler = (_e: unknown, connected: boolean) => callback(connected);
+    ipcRenderer.on('connection-status', handler); // same as WSChannels.CONNECTION_STATUS
+    return () => ipcRenderer.removeListener('connection-status', handler);
   }
 };
 
@@ -92,3 +102,4 @@ const indexingAPI = {
 // When contextIsolation is enabled in your webPreferences, your preload scripts run in an "Isolated World".
 contextBridge.exposeInMainWorld('electron', globals);
 contextBridge.exposeInMainWorld('indexingAPI', indexingAPI);
+contextBridge.exposeInMainWorld('connectionAPI', connectionAPI);

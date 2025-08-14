@@ -1,17 +1,6 @@
 // memory/progress.ts
 import { EventEmitter } from 'node:events';
-
-export type IndexingPhase = 'idle' | 'scanning' | 'embedding' | 'writing' | 'qdrant' | 'complete' | 'error';
-
-export type IndexingStatus = {
-    phase: IndexingPhase;
-    total: number;      // planned items
-    done: number;       // processed items
-    lastFile?: string;
-    qdrantPoints?: number; // optional sanity count
-    message?: string;
-    error?: string;
-};
+import type { IndexingStatus } from '../shared/indexing-types';
 
 export const indexingBus = new EventEmitter();
 
